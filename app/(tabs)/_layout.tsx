@@ -96,10 +96,11 @@ export default function TabLayout() {
       <Tabs.Screen
         name="study"
         options={{
-          title: 'Stats',
+          href: '/study',
+          title: 'Study',
           tabBarIcon: ({ color, size, focused }) => (
             <View style={styles.tabItem}>
-              <MaterialIcons size={size} name="bar-chart" color={color} />
+              <MaterialIcons size={size} name="menu-book" color={color} />
               {focused ? <View style={styles.activeDot} /> : null}
             </View>
           ),
@@ -108,10 +109,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="stats"
         options={{
-          title: 'Settings',
+          title: 'Stats',
           tabBarIcon: ({ color, size, focused }) => (
             <View style={styles.tabItem}>
-              <MaterialIcons size={size} name="settings" color={color} />
+              <MaterialIcons size={size} name="bar-chart" color={color} />
               {focused ? <View style={styles.activeDot} /> : null}
             </View>
           ),

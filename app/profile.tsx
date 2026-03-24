@@ -820,6 +820,12 @@ const navigation = useNavigation();
       </ScrollView>
 
       <View style={styles.accountActions}>
+        <Pressable onPress={() => router.push('/settings')}>
+          <ClayCard style={[styles.smallActionCard, styles.purpleCard]}>
+            <ThemedText style={styles.smallActionText}>Settings</ThemedText>
+          </ClayCard>
+        </Pressable>
+
         <Pressable onPress={handleResetWorkspace} disabled={saving}>
           <ClayCard style={[styles.smallActionCard, styles.redCard]}>
             <ThemedText style={styles.smallActionText}>Reset workspace</ThemedText>
@@ -1128,5 +1134,8 @@ const styles = StyleSheet.create({
   },
   blueCard: {
     backgroundColor: '#CAE7FF',
+  },
+  purpleCard: {
+    backgroundColor: '#DDD0FF',
   },
 });
