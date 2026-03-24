@@ -39,12 +39,3 @@ export const hasFirebaseConfig = Boolean(
   firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId
 );
 
-export const googleAuthConfig = {
-  androidClientId: process.env.EXPO_PUBLIC_FIREBASE_ANDROID_CLIENT_ID,
-  iosClientId: process.env.EXPO_PUBLIC_FIREBASE_IOS_CLIENT_ID,
-  webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_CLIENT_ID,
-};
-
-export const hasGoogleAuthConfig = Boolean(
-  googleAuthConfig.androidClientId || googleAuthConfig.iosClientId || googleAuthConfig.webClientId
-);

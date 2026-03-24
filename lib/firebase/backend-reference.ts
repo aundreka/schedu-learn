@@ -162,10 +162,19 @@ export type ScheduleSource =
   | 'lms'
   | 'eaf';
 
+export type LmsProvider =
+  | 'mock'
+  | 'canvas'
+  | 'google_classroom'
+  | 'moodle'
+  | 'openlms';
 export type LmsStatus =
   | 'new'
   | 'updated'
-  | 'synced';
+  | 'reviewed'
+  | 'synced'
+  | 'dismissed'
+  | 'error';
 
 export type MoodCheck =
   | 'low'
@@ -240,6 +249,8 @@ export type TaskItem = {
     lmsCourseId?: string;
     lmsAssignmentId?: string;
     importedFromFeedId?: string;
+    externalKey?: string;
+    provider?: LmsProvider;
   };
 
   autoSchedule: boolean;
@@ -281,14 +292,31 @@ export type ScheduleItem = {
 
 export type LmsFeedItem = {
   id: string;
+
+  provider: LmsProvider;
+  source: string;
+  externalKey: string;
+
+  externalCourseId?: string | null;
+  externalItemId?: string | null;
+  externalUrl?: string | null;
+
   title: string;
   course: string;
   type: TaskType;
   detectedDueAt: string;
+
   status: LmsStatus;
-  source: string; // e.g. "Canvas", "Moodle", "Mock LMS"
-  rawPayload?: string; // optional JSON string if needed for debugging
   linkedTaskId?: string | null;
+
+  firstSeenAt: string;
+  lastSeenAt: string;
+  syncedAt?: string | null;
+  dismissedAt?: string | null;
+
+  rawPayload?: string;
+  syncError?: string | null;
+
   createdAt: string;
   updatedAt: string;
 };
@@ -972,21 +1000,72 @@ export class SchedULearnBackend {
     });
   }
 
-  async ingestLmsFeedItems(feedItems: Omit<LmsFeedItem, 'id' | 'createdAt' | 'updatedAt'>[]) {
+  async ingestLmsFeedItems(
+    items: Omit<
+      LmsFeedItem,
+      | 'id'
+      | 'createdAt'
+      | 'updatedAt'
+      | 'firstSeenAt'
+      | 'lastSeenAt'
+      | 'syncedAt'
+      | 'dismissedAt'
+    >[]
+  ) {
     const uid = this.requireUid();
-    const batch = writeBatch(this.firestore);
+    const colRef = collection(this.firestore, lmsFeedCollectionPath(uid));
+    const now = nowIso();
 
-    for (const item of feedItems) {
-      const ref = doc(collection(this.firestore, lmsFeedCollectionPath(uid)));
-      batch.set(ref, {
-        id: ref.id,
-        ...item,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      });
+    for (const item of items) {
+      const existingQuery = query(colRef, where('externalKey', '==', item.externalKey));
+      const existingSnap = await getDocs(existingQuery);
+
+      if (!existingSnap.empty) {
+        const existingDoc = existingSnap.docs[0];
+        const existing = existingDoc.data() as LmsFeedItem;
+
+        await updateDoc(existingDoc.ref, {
+          provider: item.provider,
+          source: item.source,
+          title: item.title,
+          course: item.course,
+          type: item.type,
+          detectedDueAt: item.detectedDueAt,
+          externalCourseId: item.externalCourseId ?? null,
+          externalItemId: item.externalItemId ?? null,
+          externalUrl: item.externalUrl ?? null,
+          rawPayload: item.rawPayload ?? '',
+          syncError: null,
+          lastSeenAt: now,
+          updatedAt: now,
+          status:
+            existing.status === 'synced'
+              ? 'synced'
+              : existing.status === 'dismissed'
+                ? 'dismissed'
+                : 'updated',
+        });
+      } else {
+        const ref = doc(colRef);
+
+        await setDoc(ref, {
+          id: ref.id,
+          ...item,
+          externalCourseId: item.externalCourseId ?? null,
+          externalItemId: item.externalItemId ?? null,
+          externalUrl: item.externalUrl ?? null,
+          linkedTaskId: item.linkedTaskId ?? null,
+          rawPayload: item.rawPayload ?? '',
+          syncError: item.syncError ?? null,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          syncedAt: null,
+          dismissedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
     }
-
-    await batch.commit();
   }
 
   /**
@@ -999,11 +1078,21 @@ export class SchedULearnBackend {
     const snap = await getDoc(feedRef);
     if (!snap.exists()) throw new Error('LMS feed item not found.');
 
-    const feed = withDocId(snap.id, snap.data() as LmsFeedItem);
+    const feed = snap.data() as LmsFeedItem;
+
+    if (feed.linkedTaskId) {
+      const existingTaskRef = doc(this.firestore, `${tasksCollectionPath(uid)}/${feed.linkedTaskId}`);
+      const existingTaskSnap = await getDoc(existingTaskRef);
+
+      if (existingTaskSnap.exists()) {
+        return existingTaskSnap.data() as TaskItem;
+      }
+    }
 
     const taskRef = doc(collection(this.firestore, tasksCollectionPath(uid)));
-    const adjustedMinutes = computeDifficultyAdjustedMinutes(60, 'medium'); // default guess for LMS items in v1
+    const adjustedMinutes = computeDifficultyAdjustedMinutes(60, 'medium');
 
+    const createdAt = nowIso();
     const task: TaskItem = {
       id: taskRef.id,
       title: feed.title,
@@ -1025,35 +1114,121 @@ export class SchedULearnBackend {
       autoSchedule: true,
       sourceMeta: {
         importedFromFeedId: feed.id,
+        lmsCourseId: feed.externalCourseId ?? undefined,
+        lmsAssignmentId: feed.externalItemId ?? undefined,
+        externalKey: feed.externalKey,
+        provider: feed.provider,
       },
 
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
+      createdAt,
+      updatedAt: createdAt,
       completedAt: null,
     };
 
     await setDoc(taskRef, task);
 
+    const syncedAt = nowIso();
     await updateDoc(feedRef, {
       linkedTaskId: task.id,
       status: 'synced',
-      updatedAt: nowIso(),
+      syncedAt,
+      updatedAt: syncedAt,
     });
 
     await this.autoScheduleTask(task.id);
     return task;
   }
 
-  /**
-   * Placeholder refresh hook for real LMS sync integration.
-   *
-   * This intentionally does not seed mock data. A new user should start with
-   * an empty feed until a real LMS integration or manual ingestion path is used.
-   */
-  async refreshMockLmsFeed() {
-    return;
+  async markLmsFeedItemReviewed(feedId: string) {
+    const uid = this.requireUid();
+    const ref = doc(this.firestore, `${lmsFeedCollectionPath(uid)}/${feedId}`);
+
+    await updateDoc(ref, {
+      status: 'reviewed',
+      updatedAt: nowIso(),
+    });
   }
 
+  async dismissLmsFeedItem(feedId: string) {
+    const uid = this.requireUid();
+    const ref = doc(this.firestore, `${lmsFeedCollectionPath(uid)}/${feedId}`);
+
+    await updateDoc(ref, {
+      status: 'dismissed',
+      dismissedAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+  }
+
+  async syncLmsFeed() {
+    await this.refreshMockLmsFeed();
+  }
+
+  async refreshMockLmsFeed() {
+    const now = new Date();
+
+    const samples: Omit<
+      LmsFeedItem,
+      | 'id'
+      | 'createdAt'
+      | 'updatedAt'
+      | 'firstSeenAt'
+      | 'lastSeenAt'
+      | 'syncedAt'
+      | 'dismissedAt'
+    >[] = [
+      {
+        provider: 'mock',
+        source: 'Mock LMS',
+        externalKey: 'mock:applied-physics:physics-problem-set-3',
+        externalCourseId: 'applied-physics',
+        externalItemId: 'physics-problem-set-3',
+        externalUrl: null,
+        title: 'Physics Problem Set 3',
+        course: 'Applied Physics',
+        type: 'assignment',
+        detectedDueAt: addMinutes(now, 60 * 24).toISOString(),
+        status: 'new',
+        linkedTaskId: null,
+        rawPayload: '',
+        syncError: null,
+      },
+      {
+        provider: 'mock',
+        source: 'Mock LMS',
+        externalKey: 'mock:mathematics:calculus-quiz',
+        externalCourseId: 'mathematics',
+        externalItemId: 'calculus-quiz',
+        externalUrl: null,
+        title: 'Calculus Quiz',
+        course: 'Mathematics',
+        type: 'quiz',
+        detectedDueAt: addMinutes(now, 60 * 36).toISOString(),
+        status: 'new',
+        linkedTaskId: null,
+        rawPayload: '',
+        syncError: null,
+      },
+      {
+        provider: 'mock',
+        source: 'Mock LMS',
+        externalKey: 'mock:thermodynamics:chapter-2-reading',
+        externalCourseId: 'thermodynamics',
+        externalItemId: 'chapter-2-reading',
+        externalUrl: null,
+        title: 'Chapter 2 Reading',
+        course: 'Thermodynamics',
+        type: 'reading',
+        detectedDueAt: addMinutes(now, 60 * 48).toISOString(),
+        status: 'new',
+        linkedTaskId: null,
+        rawPayload: '',
+        syncError: null,
+      },
+    ];
+
+    await this.ingestLmsFeedItems(samples);
+  }
   // --------------------------------------------------
   // EAF UPLOAD + CLASS IMPORT
   // --------------------------------------------------
@@ -1718,8 +1893,11 @@ export type FirebaseBackendShape = {
   regenerateFutureStudyPlanForTask: (taskId: string) => Promise<ScheduleDraft[]>;
 
   // LMS
-  refreshMockLmsFeed: () => Promise<void>;
+  syncLmsFeed: () => Promise<void>;
+  refreshMockLmsFeed: () => Promise<void>; // temp compatibility alias
   createTaskFromLmsFeed: (feedId: string) => Promise<TaskItem>;
+  markLmsFeedItemReviewed: (feedId: string) => Promise<void>;
+  dismissLmsFeedItem: (feedId: string) => Promise<void>;
 
   // profile / onboarding
   updateProfile: (patch: Partial<UserProfile>) => Promise<void>;
@@ -1834,6 +2012,14 @@ export type FirebaseBackendShape = {
  *
  * That is much safer than trying to guarantee perfect automatic PDF parsing.
  */
+
+
+
+
+
+
+
+
 
 
 

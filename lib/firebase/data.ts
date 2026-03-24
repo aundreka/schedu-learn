@@ -72,7 +72,7 @@ export function mapLmsFeedItem(item: BackendLmsFeedItem): LmsFeedItem {
   return {
     ...item,
     due: item.detectedDueAt,
-    syncedAt: item.updatedAt,
+    syncedAt: item.syncedAt ?? item.updatedAt,
   };
 }
 
@@ -207,7 +207,7 @@ export async function createTaskAndSchedule(uid: string, input: CreateTaskInput)
 
 export async function refreshLmsFeed(uid: string) {
   ensureMatchingUser(uid);
-  await backend.refreshMockLmsFeed();
+  await backend.syncLmsFeed();
 }
 
 export async function updateTaskStatus(uid: string, taskId: string, status: TaskItem['status']) {
@@ -320,3 +320,8 @@ export async function addStudyBlock(uid: string, input: CreateStudyBlockInput) {
   ensureMatchingUser(uid);
   await backend.createStudyBlock(input);
 }
+
+
+
+
+
