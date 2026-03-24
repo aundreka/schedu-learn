@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>1005241435875-d0ul2a4vu9rhvfkssv0cfn79f4n4uodb.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.1005241435875-d0ul2a4vu9rhvfkssv0cfn79f4n4uodb</string>
+	<key>API_KEY</key>
+	<string>AIzaSyCl1d-X9VIUXAqN4t7LR7tC-jqrK2FdZq4</string>
+	<key>GCM_SENDER_ID</key>
+	<string>1005241435875</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>schedu-learn</string>
+	<key>PROJECT_ID</key>
+	<string>schedu-learn</string>
+	<key>STORAGE_BUCKET</key>
+	<string>schedu-learn.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1005241435875:ios:5d62a4834bcd3fa94b27d6</string>
+</dict>
+</plist>
