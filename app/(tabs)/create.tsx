@@ -16,6 +16,7 @@ import {
   ClayStatCard,
 } from '@/components/clay-ui';
 import { ThemedText } from '@/components/themed-text';
+import { assessUrgency, formatUrgencyLabel, getDefaultGradeImpactPercent } from '@/lib/urgency';
 import { useFirebaseBackend } from '@/providers/firebase-provider';
 
 type TaskType = 'assignment' | 'quiz' | 'exam' | 'project' | 'reading' | 'other';
@@ -63,12 +64,16 @@ function toIsoFromDateAndTime(dueDate: string, dueTime: string) {
   return new Date(year, month - 1, day, hour, minute, 0, 0).toISOString();
 }
 
-function estimateUrgencyLabel(dueAt: string) {
-  const hoursLeft = (new Date(dueAt).getTime() - Date.now()) / 3_600_000;
-
-  if (hoursLeft <= 24) return 'Urgent';
-  if (hoursLeft <= 72) return 'High priority';
-  return 'Planned';
+function taskCardTone(task: {
+  difficulty: Difficulty;
+  dueAt: string;
+  estimatedMinutes: number;
+  gradeImpactPercent?: number;
+  remainingMinutes: number;
+  scheduledMinutes: number;
+  type: TaskType;
+}) {
+  return assessUrgency(task).color;
 }
 
 export default function CreateScreen() {
@@ -87,6 +92,7 @@ export default function CreateScreen() {
   const [taskType, setTaskType] = useState<TaskType>('assignment');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [estimatedMinutes, setEstimatedMinutes] = useState('60');
+  const [gradeImpactPercent, setGradeImpactPercent] = useState(String(getDefaultGradeImpactPercent('assignment')));
   const [dueDate, setDueDate] = useState(defaults.dueDate);
   const [dueTime, setDueTime] = useState(defaults.dueTime);
   const [notes, setNotes] = useState('');
@@ -101,6 +107,19 @@ export default function CreateScreen() {
       return null;
     }
   }, [dueDate, dueTime]);
+
+  const previewUrgency = useMemo(() => {
+    if (!previewDueIso) return null;
+    return assessUrgency({
+      type: taskType,
+      dueAt: previewDueIso,
+      difficulty,
+      estimatedMinutes: Number(estimatedMinutes) || 0,
+      gradeImpactPercent: Number(gradeImpactPercent) || undefined,
+      remainingMinutes: Number(estimatedMinutes) || 0,
+      scheduledMinutes: 0,
+    });
+  }, [difficulty, dueDate, dueTime, estimatedMinutes, gradeImpactPercent, previewDueIso, taskType]);
 
   const handleCreateTask = async () => {
     if (!user) {
@@ -121,6 +140,12 @@ export default function CreateScreen() {
     const minutes = Number(estimatedMinutes);
     if (!Number.isFinite(minutes) || minutes < 15) {
       Alert.alert('Task planner', 'Estimated time must be at least 15 minutes.');
+      return;
+    }
+
+    const gradeImpact = Number(gradeImpactPercent);
+    if (!Number.isFinite(gradeImpact) || gradeImpact < 0 || gradeImpact > 100) {
+      Alert.alert('Task planner', 'Grade impact must be between 0 and 100.');
       return;
     }
 
@@ -148,15 +173,17 @@ export default function CreateScreen() {
         dueAt,
         estimatedMinutes: minutes,
         difficulty,
+        gradeImpactPercent: gradeImpact,
         notes: notes.trim(),
         autoSchedule: true,
-      });
+      } as never);
 
       setTitle('');
       setSubject('');
       setTaskType('assignment');
       setDifficulty('medium');
       setEstimatedMinutes('60');
+      setGradeImpactPercent(String(getDefaultGradeImpactPercent('assignment')));
       setDueDate(defaults.dueDate);
       setDueTime(defaults.dueTime);
       setNotes('');
@@ -313,6 +340,18 @@ export default function CreateScreen() {
         </View>
 
         <View style={styles.fieldGroup}>
+          <ThemedText style={styles.label}>Grade impact (%)</ThemedText>
+          <TextInput
+            value={gradeImpactPercent}
+            onChangeText={setGradeImpactPercent}
+            placeholder="How much of the grade depends on this?"
+            placeholderTextColor="#A899C8"
+            keyboardType="number-pad"
+            style={styles.input}
+          />
+        </View>
+
+        <View style={styles.fieldGroup}>
           <ThemedText style={styles.label}>Notes (optional)</ThemedText>
           <TextInput
             value={notes}
@@ -331,8 +370,8 @@ export default function CreateScreen() {
           </View>
 
           <ThemedText style={styles.previewText}>
-            {previewDueIso
-              ? `This task will be saved, assigned ${estimateUrgencyLabel(previewDueIso).toLowerCase()}, and sent to the scheduler to generate study blocks around your existing class schedule, EAF-imported classes, and synced LMS deadlines.`
+            {previewUrgency
+              ? `This task will be treated as ${formatUrgencyLabel(previewUrgency.level).toLowerCase()} with a score of ${previewUrgency.score}/100, using both due date pressure and its ${previewUrgency.gradeImpactPercent}% grade effect.`
               : 'Enter a valid due date and time to preview scheduling behavior.'}
           </ThemedText>
         </View>
@@ -346,7 +385,27 @@ export default function CreateScreen() {
             key={task.id}
             style={[
               styles.taskCard,
-              index % 3 === 0 ? styles.orange : index % 3 === 1 ? styles.purple : styles.blue,
+              taskCardTone({
+                type: task.type,
+                dueAt: task.dueAt,
+                difficulty: task.difficulty,
+                estimatedMinutes: task.estimatedMinutes,
+                remainingMinutes: task.remainingMinutes,
+                scheduledMinutes: task.scheduledMinutes,
+                gradeImpactPercent: (task as typeof task & { gradeImpactPercent?: number }).gradeImpactPercent,
+              }) === 'red'
+                ? styles.red
+                : taskCardTone({
+                    type: task.type,
+                    dueAt: task.dueAt,
+                    difficulty: task.difficulty,
+                    estimatedMinutes: task.estimatedMinutes,
+                    remainingMinutes: task.remainingMinutes,
+                    scheduledMinutes: task.scheduledMinutes,
+                    gradeImpactPercent: (task as typeof task & { gradeImpactPercent?: number }).gradeImpactPercent,
+                  }) === 'yellow'
+                  ? styles.orange
+                  : styles.blue,
             ]}>
             <View style={styles.taskTop}>
               <View style={styles.iconBadge}>
@@ -507,6 +566,9 @@ const styles = StyleSheet.create({
   },
   orange: {
     backgroundColor: '#FFE4B0',
+  },
+  red: {
+    backgroundColor: '#FFD7D7',
   },
   blue: {
     backgroundColor: '#CAE7FF',

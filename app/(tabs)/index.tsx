@@ -18,6 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ScheduleItem, TaskItem } from '@/lib/firebase/types';
+import { assessTaskUrgency, formatUrgencyLabel } from '@/lib/urgency';
 import { useFirebaseBackend } from '@/providers/firebase-provider';
 
 type AlertTone = 'orange' | 'red' | 'blue';
@@ -102,16 +103,19 @@ function greetingForHour(hour: number) {
   return 'Good evening';
 }
 
-function eventColor(type: ScheduleItem['type'], index: number) {
-  if (type === 'class') {
-    return index % 2 === 0 ? styles.eventPurple : styles.eventBlue;
+function eventColor(item: ScheduleItem, taskMap: Map<string, TaskItem>) {
+  if (item.taskId) {
+    const linkedTask = taskMap.get(item.taskId);
+    const color = linkedTask ? assessTaskUrgency(linkedTask).color : item.urgency;
+    if (color === 'red') return styles.eventRed;
+    if (color === 'yellow') return styles.eventYellow;
+    return styles.eventGreen;
   }
 
-  if (type === 'study') {
-    return index % 2 === 0 ? styles.eventGreen : styles.eventYellow;
-  }
-
-  return styles.eventPink;
+  if (item.urgency === 'red') return styles.eventRed;
+  if (item.urgency === 'yellow') return styles.eventYellow;
+  if (item.type === 'class') return styles.eventBlue;
+  return styles.eventGreen;
 }
 
 function eventIcon(type: ScheduleItem['type']) {
@@ -121,14 +125,13 @@ function eventIcon(type: ScheduleItem['type']) {
 }
 
 function taskPriorityLabel(task: TaskItem) {
-  if (task.priority === 'urgent') return 'Urgent';
-  if (task.priority === 'high') return 'High';
-  return 'Planned';
+  return formatUrgencyLabel(assessTaskUrgency(task).level);
 }
 
 function urgencyWeight(task: TaskItem) {
-  if (task.colorCode === 'red') return 3;
-  if (task.colorCode === 'yellow') return 2;
+  const urgency = assessTaskUrgency(task);
+  if (urgency.level === 'high') return 3;
+  if (urgency.level === 'medium') return 2;
   return 1;
 }
 
@@ -352,13 +355,14 @@ function streakShadowStyle(tone: StreakTone) {
 }
 
 function taskRiskScore(task: TaskItem, now: Date) {
+  const urgency = assessTaskUrgency(task);
   const hoursLeft = (new Date(task.dueAt).getTime() - now.getTime()) / 3_600_000;
   const remainingRatio =
     task.estimatedMinutes > 0 ? task.remainingMinutes / task.estimatedMinutes : 0;
   const scheduleCoverage =
     task.estimatedMinutes > 0 ? task.scheduledMinutes / task.estimatedMinutes : 0;
 
-  let score = urgencyWeight(task) * 100;
+  let score = urgency.score * 2 + urgencyWeight(task) * 40;
 
   if (hoursLeft <= 12) score += 160;
   else if (hoursLeft <= 24) score += 120;
@@ -1040,7 +1044,7 @@ export default function HomeScreen() {
                               }
                               style={({ pressed }) => [
                                 styles.eventBlock,
-                                eventColor(item.type, index),
+                                eventColor(item, taskMap),
                                 pressed ? styles.eventPressed : null,
                               ]}>
                               <View style={styles.eventNameRow}>
@@ -1528,6 +1532,9 @@ const styles = StyleSheet.create({
   },
   eventYellow: {
     backgroundColor: '#FFF0A8',
+  },
+  eventRed: {
+    backgroundColor: '#FFD7D7',
   },
   eventPink: {
     backgroundColor: '#FFD6EA',
