@@ -270,6 +270,13 @@ export async function createRecurringClassSchedules(uid: string, classes: Extrac
       const start = setDayTime(classDate, cls.startHour, cls.startMinute);
       const end = setDayTime(classDate, cls.endHour, cls.endMinute);
 
+      const recurringClassMeta = {
+        ...(cls.courseCode ? { courseCode: cls.courseCode } : {}),
+        ...(cls.room ? { room: cls.room } : {}),
+        ...(cls.instructor ? { instructor: cls.instructor } : {}),
+        weekday: cls.weekday,
+      };
+
       blocks.push({
         title: cls.title,
         type: 'class',
@@ -278,16 +285,10 @@ export async function createRecurringClassSchedules(uid: string, classes: Extrac
         location: cls.location ?? cls.room ?? 'Classroom',
         taskId: null,
         subject: cls.subject,
-        difficulty: undefined,
         status: 'scheduled',
         source: 'manual',
         urgency: 'green',
-        recurringClassMeta: {
-          courseCode: cls.courseCode,
-          room: cls.room,
-          instructor: cls.instructor,
-          weekday: cls.weekday,
-        },
+        recurringClassMeta,
       });
     }
   }
