@@ -1,6 +1,7 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Redirect } from 'expo-router';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { ClayScreen, ClayCard } from '@/components/clay-ui';
 import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -16,23 +17,24 @@ export default function AuthCallbackScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color={palette.tint} />
-      <ThemedText style={styles.title}>Checking your session...</ThemedText>
-    </View>
+    <ClayScreen title="Checking your session" subtitle="Getting your clay dashboard ready." onRefresh={async () => {}}>
+      <ClayCard style={styles.card}>
+        <ActivityIndicator size="large" color={palette.tint} />
+        <ThemedText style={styles.text}>Connecting to Firebase...</ThemedText>
+      </ClayCard>
+    </ClayScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  card: {
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    gap: 14,
+    gap: 12,
+    paddingVertical: 28,
   },
-  title: {
-    fontSize: 16,
-    fontWeight: '600',
+  text: {
+    fontSize: 14,
+    color: '#6B5B8A',
+    fontWeight: '700',
   },
 });

@@ -12,19 +12,42 @@ import {
 } from 'firebase/auth';
 import { ReactNode, createContext, useContext, useEffect, useMemo, useState } from 'react';
 
+import type { FirebaseBackendShape as BackendShape } from '@/lib/firebase/backend-reference';
 import { auth, googleAuthConfig, hasGoogleAuthConfig } from '@/lib/firebase/config';
 import {
   addQuickTask,
+  addStudyBlock,
+  backend,
+  completeOnboarding,
+  createRecurringClassSchedules as createRecurringClassSchedulesData,
+  createTask,
+  createTaskAndSchedule,
   ensureUserWorkspace,
-  seedLmsMockData,
+  mapPreferences,
+  mapProfile,
+  mapTask,
+  moveSchedule,
+  refreshLmsFeed,
+  resetCurrentUserData,
+  clearImportedEafClassSchedules as clearImportedEafClassSchedulesData,
   subscribeToLmsFeed,
+  subscribeToPreferences,
   subscribeToProfile,
   subscribeToSchedules,
   subscribeToTasks,
   updatePreferences,
+  updateProfile as updateBackendProfile,
+  updateTask,
+  updateTaskStatus,
 } from '@/lib/firebase/data';
-import {
+import type {
+  CompleteOnboardingInput,
+  CreateStudyBlockInput,
+  CreateTaskInput,
+  EafImportItem,
+  ExtractedClass,
   LmsFeedItem,
+  ScheduleDraft,
   ScheduleItem,
   TaskItem,
   UserPreferences,
@@ -33,15 +56,11 @@ import {
 
 WebBrowser.maybeCompleteAuthSession();
 
-type FirebaseContextValue = {
+type FirebaseContextValue = Omit<
+  BackendShape,
+  'profile' | 'preferences' | 'tasks' | 'schedules' | 'lmsFeed' | 'createTask' | 'createTaskAndSchedule' | 'createStudyBlock' | 'createTaskFromLmsFeed' | 'updateProfile' | 'completeOnboarding' | 'resetCurrentUserData'
+> & {
   authReady: boolean;
-  user: User | null;
-  profile: UserProfile | null;
-  tasks: TaskItem[];
-  schedules: ScheduleItem[];
-  lmsFeed: LmsFeedItem[];
-  loadingData: boolean;
-  authMessage: string | null;
   canUseGoogleSignIn: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -49,14 +68,32 @@ type FirebaseContextValue = {
   signOut: () => Promise<void>;
   savePreferences: (preferences: Partial<UserPreferences>) => Promise<void>;
   createQuickTask: () => Promise<void>;
-  refreshMockLmsFeed: () => Promise<void>;
+  profile: UserProfile | null;
+  preferences: UserPreferences | null;
+  tasks: TaskItem[];
+  schedules: ScheduleItem[];
+  lmsFeed: LmsFeedItem[];
+  createTask: (input: CreateTaskInput) => Promise<TaskItem>;
+  createTaskAndSchedule: (input: CreateTaskInput) => Promise<TaskItem>;
+  createStudyBlock: (input: CreateStudyBlockInput) => Promise<void>;
+  autoScheduleTask: (taskId: string) => Promise<ScheduleDraft[]>;
+  regenerateFutureStudyPlanForTask: (taskId: string) => Promise<ScheduleDraft[]>;
+  uploadEafFile: (params: { fileUri: string; blob: Blob; filename: string }) => Promise<EafImportItem>;
+  saveParsedEafClasses: (importId: string, extractedClasses: ExtractedClass[], extractedText?: string) => Promise<void>;
+  confirmEafClasses: (importId: string, confirmedClasses: ExtractedClass[]) => Promise<void>;
+  importConfirmedEafClassesToSchedules: (importId: string, weeksToGenerate?: number) => Promise<void>;
+  createRecurringClassSchedules: (classes: ExtractedClass[], weeksToGenerate?: number) => Promise<void>;
+  updateProfile: (patch: Partial<UserProfile>) => Promise<void>;
+  completeOnboarding: (input: CompleteOnboardingInput) => Promise<void>;
+  resetCurrentUserData: () => Promise<void>;
 };
 
 const FirebaseContext = createContext<FirebaseContextValue | null>(null);
 
 export function FirebaseProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [rawProfile, setRawProfile] = useState<Omit<UserProfile, 'preferences'> | null>(null);
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [lmsFeed, setLmsFeed] = useState<LmsFeedItem[]>([]);
@@ -103,7 +140,8 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user) {
-      setProfile(null);
+      setRawProfile(null);
+      setPreferences(null);
       setTasks([]);
       setSchedules([]);
       setLmsFeed([]);
@@ -112,94 +150,191 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
     }
 
     setLoadingData(true);
+    setAuthMessage(null);
 
-    const unsubProfile = subscribeToProfile(
-      user.uid,
-      (nextProfile) => {
-        setProfile(nextProfile);
+    let pendingStreams = 5;
+    const settleStream = () => {
+      pendingStreams -= 1;
+      if (pendingStreams <= 0) {
         setLoadingData(false);
-      },
-      (error) => setAuthMessage(error.message)
-    );
+      }
+    };
 
-    const unsubTasks = subscribeToTasks(user.uid, setTasks, (error) => setAuthMessage(error.message));
-    const unsubSchedules = subscribeToSchedules(
-      user.uid,
-      setSchedules,
-      (error) => setAuthMessage(error.message)
-    );
-    const unsubLms = subscribeToLmsFeed(user.uid, setLmsFeed, (error) => setAuthMessage(error.message));
+    const handleError = (error: Error) => {
+      setAuthMessage(error.message);
+      setLoadingData(false);
+    };
+
+    const unsubProfile = subscribeToProfile(user.uid, (nextProfile) => {
+      setRawProfile(nextProfile);
+      settleStream();
+    }, handleError);
+
+    const unsubPreferences = subscribeToPreferences(user.uid, (nextPreferences) => {
+      setPreferences(nextPreferences ? mapPreferences(nextPreferences) : null);
+      settleStream();
+    }, handleError);
+
+    const unsubTasks = subscribeToTasks(user.uid, (nextTasks) => {
+      setTasks(nextTasks);
+      settleStream();
+    }, handleError);
+
+    const unsubSchedules = subscribeToSchedules(user.uid, (nextSchedules) => {
+      setSchedules(nextSchedules);
+      settleStream();
+    }, handleError);
+
+    const unsubLms = subscribeToLmsFeed(user.uid, (nextFeed) => {
+      setLmsFeed(nextFeed);
+      settleStream();
+    }, handleError);
 
     return () => {
       unsubProfile();
+      unsubPreferences();
       unsubTasks();
       unsubSchedules();
       unsubLms();
     };
   }, [user]);
 
-  const value = useMemo<FirebaseContextValue>(
-    () => ({
-      authReady,
-      user,
-      profile,
-      tasks,
-      schedules,
-      lmsFeed,
-      loadingData,
-      authMessage,
-      canUseGoogleSignIn: hasGoogleAuthConfig,
-      signInWithGoogle: async () => {
-        if (!hasGoogleAuthConfig) {
-          throw new Error('Add Google client IDs to .env before using Google sign-in.');
-        }
+  const profile = useMemo(() => mapProfile(rawProfile, preferences), [preferences, rawProfile]);
 
-        setAuthMessage(null);
-        await promptAsync();
-      },
-      signInWithEmail: async (email, password) => {
-        setAuthMessage(null);
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-      },
-      signUpWithEmail: async (email, password, displayName) => {
-        setAuthMessage(null);
-        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  const value = useMemo<FirebaseContextValue>(() => ({
+    authReady,
+    user,
+    profile,
+    preferences,
+    tasks,
+    schedules,
+    lmsFeed,
+    loadingData,
+    authMessage,
+    canUseGoogleSignIn: hasGoogleAuthConfig,
+    ensureUserBootstrap: async () => {
+      await backend.ensureUserBootstrap();
+    },
+    signInWithGoogle: async () => {
+      if (!hasGoogleAuthConfig) {
+        throw new Error('Add Google client IDs to .env before using Google sign-in.');
+      }
 
-        if (displayName?.trim()) {
-          await updateProfile(credential.user, {
-            displayName: displayName.trim(),
-          });
-        }
+      setAuthMessage(null);
+      await promptAsync();
+    },
+    signInWithEmail: async (email, password) => {
+      setAuthMessage(null);
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+    },
+    signUpWithEmail: async (email, password, displayName) => {
+      setAuthMessage(null);
+      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
 
-        await ensureUserWorkspace(credential.user);
-      },
-      signOut: async () => {
-        await firebaseSignOut(auth);
-      },
-      savePreferences: async (preferences) => {
-        if (!user) {
-          throw new Error('Sign in first to save preferences.');
-        }
+      if (displayName?.trim()) {
+        await updateProfile(credential.user, {
+          displayName: displayName.trim(),
+        });
+      }
 
-        await updatePreferences(user.uid, preferences);
-      },
-      createQuickTask: async () => {
-        if (!user) {
-          throw new Error('Sign in first to create a task.');
-        }
-
-        await addQuickTask(user.uid);
-      },
-      refreshMockLmsFeed: async () => {
-        if (!user) {
-          throw new Error('Sign in first to refresh LMS items.');
-        }
-
-        await seedLmsMockData(user.uid);
-      },
-    }),
-    [authMessage, authReady, lmsFeed, loadingData, profile, promptAsync, schedules, tasks, user]
-  );
+      await ensureUserWorkspace(credential.user);
+    },
+    signOut: async () => {
+      await firebaseSignOut(auth);
+    },
+    savePreferences: async (nextPreferences) => {
+      if (!user) throw new Error('Sign in first to save preferences.');
+      await updatePreferences(user.uid, nextPreferences);
+    },
+    createQuickTask: async () => {
+      if (!user) throw new Error('Sign in first to create a task.');
+      await addQuickTask(user.uid);
+    },
+    createTask: async (input) => {
+      if (!user) throw new Error('Sign in first to create a task.');
+      return createTask(user.uid, input);
+    },
+    createTaskAndSchedule: async (input) => {
+      if (!user) throw new Error('Sign in first to create a task.');
+      return createTaskAndSchedule(user.uid, input);
+    },
+    updateTask: async (taskId, patch) => {
+      if (!user) throw new Error('Sign in first to update tasks.');
+      await updateTask(user.uid, taskId, patch);
+    },
+    setTaskStatus: async (taskId, status) => {
+      if (!user) throw new Error('Sign in first to update tasks.');
+      await updateTaskStatus(user.uid, taskId, status);
+    },
+    refreshMockLmsFeed: async () => {
+      if (!user) throw new Error('Sign in first to refresh LMS items.');
+      await refreshLmsFeed(user.uid);
+    },
+    createTaskFromLmsFeed: async (feedId: string) => {
+      if (!user) throw new Error('Sign in first to convert LMS items.');
+      return mapTask(await backend.createTaskFromLmsFeed(feedId));
+    },
+    updateProfile: async (patch) => {
+      if (!user) throw new Error('Sign in first to update your profile.');
+      await updateBackendProfile(user.uid, patch);
+    },
+    completeOnboarding: async (input) => {
+      if (!user) throw new Error('Sign in first to complete onboarding.');
+      await completeOnboarding(user.uid, input);
+    },
+    resetCurrentUserData: async () => {
+      if (!user) throw new Error('Sign in first to reset your workspace.');
+      await resetCurrentUserData(user.uid);
+    },
+    createStudyBlock: async (input) => {
+      if (!user) throw new Error('Sign in first to add a study block.');
+      await addStudyBlock(user.uid, input);
+    },
+    rescheduleItem: async (scheduleId, startsAt, endsAt) => {
+      if (!user) throw new Error('Sign in first to update your schedule.');
+      await moveSchedule(user.uid, scheduleId, startsAt, endsAt);
+    },
+    markScheduleDone: async (scheduleId) => {
+      if (!user) throw new Error('Sign in first to update your schedule.');
+      await backend.markScheduleDone(scheduleId);
+    },
+    markScheduleMissed: async (scheduleId) => {
+      if (!user) throw new Error('Sign in first to update your schedule.');
+      await backend.markScheduleMissed(scheduleId);
+    },
+    autoScheduleTask: async (taskId) => {
+      if (!user) throw new Error('Sign in first to schedule tasks.');
+      return backend.autoScheduleTask(taskId);
+    },
+    regenerateFutureStudyPlanForTask: async (taskId) => {
+      if (!user) throw new Error('Sign in first to rebuild schedules.');
+      return backend.regenerateFutureStudyPlanForTask(taskId);
+    },
+    uploadEafFile: async (params) => {
+      if (!user) throw new Error('Sign in first to upload EAF files.');
+      return backend.uploadEafFile(params);
+    },
+    saveParsedEafClasses: async (importId, extractedClasses, extractedText) => {
+      if (!user) throw new Error('Sign in first to save parsed classes.');
+      await backend.saveParsedEafClasses(importId, extractedClasses, extractedText);
+    },
+    confirmEafClasses: async (importId, confirmedClasses) => {
+      if (!user) throw new Error('Sign in first to confirm classes.');
+      await backend.confirmEafClasses(importId, confirmedClasses);
+    },
+    importConfirmedEafClassesToSchedules: async (importId, weeksToGenerate) => {
+      if (!user) throw new Error('Sign in first to import classes.');
+      await backend.importConfirmedEafClassesToSchedules(importId, weeksToGenerate);
+    },
+    createRecurringClassSchedules: async (classes, weeksToGenerate) => {
+      if (!user) throw new Error('Sign in first to save class schedules.');
+      await createRecurringClassSchedulesData(user.uid, classes, weeksToGenerate);
+    },
+    clearImportedEafClassSchedules: async () => {
+      if (!user) throw new Error('Sign in first to clear imported classes.');
+      await clearImportedEafClassSchedulesData(user.uid);
+    },
+  }), [authMessage, authReady, lmsFeed, loadingData, preferences, profile, promptAsync, schedules, tasks, user]);
 
   return <FirebaseContext.Provider value={value}>{children}</FirebaseContext.Provider>;
 }
@@ -213,3 +348,6 @@ export function useFirebaseBackend() {
 
   return context;
 }
+
+
+

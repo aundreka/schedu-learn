@@ -1,23 +1,18 @@
-import { Redirect, Tabs, useRouter } from 'expo-router';
-import React from 'react';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Redirect, Tabs } from 'expo-router';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { ThemedText } from '@/components/themed-text';
-import { Colors } from '@/constants/theme';
+import { Clay, Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFirebaseBackend } from '@/providers/firebase-provider';
 
 export default function TabLayout() {
-  const router = useRouter();
-  const colorScheme = useColorScheme();
-  const palette = Colors[colorScheme ?? 'light'];
-  const tabBarBackground = colorScheme === 'dark' ? '#0F1417' : '#FFFFFF';
-  const headerBackground = colorScheme === 'dark' ? '#151718' : '#FFFFFF';
-  const { authReady, user } = useFirebaseBackend();
+  const colorScheme = useColorScheme() ?? 'light';
+  const palette = Colors[colorScheme];
+  const { authReady, loadingData, profile, user } = useFirebaseBackend();
 
-  if (!authReady) {
+  if (!authReady || loadingData) {
     return null;
   }
 
@@ -25,96 +20,101 @@ export default function TabLayout() {
     return <Redirect href="/callback" />;
   }
 
+  if (profile && !profile.onboardingCompleted) {
+    return <Redirect href="/profile" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
+        headerShown: false,
+        sceneStyle: {
+          backgroundColor: palette.background,
+        },
         tabBarActiveTintColor: palette.tint,
         tabBarInactiveTintColor: palette.tabIconDefault,
-        headerStyle: {
-          backgroundColor: headerBackground,
-        },
-        headerShadowVisible: false,
-        headerTitle: '',
-        headerLeft: () => (
-          <View style={styles.headerLeft}>
-            <Image source={require('@/assets/images/icon.png')} style={styles.logoImage} />
-            <View>
-              <ThemedText style={styles.logoText}>SchedU Learn</ThemedText>
-              <ThemedText style={[styles.logoSubtext, { color: palette.icon }]}>
-                Student planner
-              </ThemedText>
-            </View>
-          </View>
-        ),
-        headerRight: () => (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-            onPress={() => router.push('/profile')}
-            style={({ pressed }) => [
-              styles.profileButton,
-              {
-                backgroundColor: pressed ? palette.tint : 'transparent',
-                borderColor: palette.icon,
-              },
-            ]}>
-            {({ pressed }) => (
-              <MaterialIcons
-                name="person-outline"
-                size={22}
-                color={pressed ? headerBackground : palette.text}
-              />
-            )}
-          </Pressable>
-        ),
-        tabBarButton: HapticTab,
         tabBarStyle: {
-          backgroundColor: tabBarBackground,
-          borderTopColor: colorScheme === 'dark' ? '#232A2F' : '#E5E9F0',
-          height: 76,
-          paddingTop: 8,
-          paddingBottom: 8,
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 88,
+          paddingTop: 10,
+          paddingBottom: 20,
+          backgroundColor: 'rgba(255,255,255,0.9)',
+          borderTopWidth: 0,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          ...Clay.deepShadow,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
+          fontSize: 10,
+          fontWeight: '700',
+          fontFamily: Fonts.rounded,
         },
+        tabBarIconStyle: {
+          marginBottom: 2,
+        },
+        tabBarBackground: () => <View style={styles.tabBarBackground} />,
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <MaterialIcons size={size} name="home-filled" color={color} />,
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabItem}>
+              <MaterialIcons size={size} name="home-filled" color={color} />
+              {focused ? <View style={styles.activeDot} /> : null}
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
           title: 'Calendar',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons size={size} name="calendar-month" color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabItem}>
+              <MaterialIcons size={size} name="calendar-month" color={color} />
+              {focused ? <View style={styles.activeDot} /> : null}
+            </View>
           ),
         }}
       />
       <Tabs.Screen
         name="create"
         options={{
-          title: 'Create',
-          tabBarIcon: ({ color, size }) => <MaterialIcons size={size} name="add-circle" color={color} />,
+          title: 'Tasks',
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabItem}>
+              <MaterialIcons size={size} name="task-alt" color={color} />
+              {focused ? <View style={styles.activeDot} /> : null}
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
         name="study"
         options={{
-          title: 'Study',
-          tabBarIcon: ({ color, size }) => <MaterialIcons size={size} name="school" color={color} />,
+          title: 'Stats',
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabItem}>
+              <MaterialIcons size={size} name="bar-chart" color={color} />
+              {focused ? <View style={styles.activeDot} /> : null}
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
         name="stats"
         options={{
-          title: 'Stats',
-          tabBarIcon: ({ color, size }) => <MaterialIcons size={size} name="bar-chart" color={color} />,
+          title: 'Settings',
+          tabBarIcon: ({ color, size, focused }) => (
+            <View style={styles.tabItem}>
+              <MaterialIcons size={size} name="settings" color={color} />
+              {focused ? <View style={styles.activeDot} /> : null}
+            </View>
+          ),
         }}
       />
     </Tabs>
@@ -122,35 +122,23 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  tabBarBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
-  logoBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  logoImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-  },
-  logoText: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  logoSubtext: {
-    fontSize: 12,
-  },
-  profileButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  tabItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    gap: 3,
+    minWidth: 44,
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#7A55B0',
+    marginTop: 3,
   },
 });

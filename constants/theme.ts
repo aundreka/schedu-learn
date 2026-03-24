@@ -1,53 +1,90 @@
 /**
  * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = '#7A55B0';
+const tintColorDark = '#7A55B0';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
+    text: '#2D2250',
+    background: '#F0ECFF',
     tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+    icon: '#6B5B8A',
+    tabIconDefault: '#A899C8',
     tabIconSelected: tintColorLight,
+    card: '#FFFFFF',
+    clayPurple: '#C9B8FF',
+    clayPink: '#FFB8D9',
+    clayOrange: '#FFCF86',
+    clayGreen: '#B8F0D0',
+    clayBlue: '#B8E0FF',
+    clayRed: '#FFB8B8',
+    clayYellow: '#FFF3B8',
+    textLight: '#A899C8',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    text: '#2D2250',
+    background: '#F0ECFF',
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: '#6B5B8A',
+    tabIconDefault: '#A899C8',
     tabIconSelected: tintColorDark,
+    card: '#FFFFFF',
+    clayPurple: '#C9B8FF',
+    clayPink: '#FFB8D9',
+    clayOrange: '#FFCF86',
+    clayGreen: '#B8F0D0',
+    clayBlue: '#B8E0FF',
+    clayRed: '#FFB8B8',
+    clayYellow: '#FFF3B8',
+    textLight: '#A899C8',
   },
 };
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+    sans: 'Nunito',
+    serif: 'Georgia',
+    rounded: 'Nunito',
+    mono: 'Nunito Sans',
+  },
+  android: {
+    sans: 'sans-serif',
+    serif: 'serif',
+    rounded: 'sans-serif-medium',
+    mono: 'sans-serif',
   },
   default: {
     sans: 'normal',
     serif: 'serif',
     rounded: 'normal',
-    mono: 'monospace',
+    mono: 'normal',
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    sans: "'Nunito', system-ui, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    rounded: "'Nunito', system-ui, sans-serif",
+    mono: "'Nunito Sans', system-ui, sans-serif",
   },
 });
+
+export const Clay = {
+  radius: 24,
+  shadow: {
+    shadowColor: 'rgba(120,90,200,0.22)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  deepShadow: {
+    shadowColor: 'rgba(120,90,200,0.26)',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+};

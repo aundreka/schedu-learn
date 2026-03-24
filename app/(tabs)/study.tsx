@@ -1,91 +1,79 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { AppScreen } from '@/components/app-screen';
+import { ClayCard, ClayPill, ClayScreen, ClaySectionHeader, ClayStatCard } from '@/components/clay-ui';
 import { ThemedText } from '@/components/themed-text';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useFirebaseBackend } from '@/providers/firebase-provider';
 
 export default function StudyScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const palette = Colors[colorScheme];
-  const cardBackground = colorScheme === 'dark' ? '#1E2428' : '#F4F7FB';
+  const { profile, refreshMockLmsFeed, schedules, tasks, user } = useFirebaseBackend();
+  const completed = tasks.filter((task) => task.status === 'done').length;
+  const focusBlocks = schedules.filter((item) => item.type === 'study').length;
 
   return (
-    <AppScreen
-      eyebrow="Study"
-      title="Stay locked in with guided review sessions."
-      description="Firebase stays responsible for auth and sync here. Gemini can be added later through any separate backend you want."
-      summary={[
-        { label: 'Firebase', value: 'Auth + Firestore' },
-        { label: 'Gemini', value: 'Separate' },
-        { label: 'Plan', value: 'Free-friendly' },
-        { label: 'Backend', value: 'Flexible' },
-      ]}
-      agenda={[
-        {
-          title: 'Resume biology deck',
-          subtitle: 'Continue from card 46 with spaced-repetition prompts.',
-          icon: 'school',
-        },
-        {
-          title: 'Practice set',
-          subtitle: 'Solve a short timed round to sharpen retrieval speed.',
-          icon: 'timer',
-        },
-        {
-          title: 'Concept recap',
-          subtitle: 'Read concise summaries before the next lecture starts.',
-          icon: 'menu-book',
-        },
-      ]}>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => Linking.openURL('https://ai.google.dev/')}
-        style={({ pressed }) => [
-          styles.infoButton,
-          { backgroundColor: pressed ? palette.icon : palette.tint },
-        ]}>
-        <MaterialIcons name="open-in-new" size={20} color="#FFFFFF" />
-        <ThemedText style={styles.infoButtonText}>Open Gemini docs</ThemedText>
-      </Pressable>
-      <View style={[styles.planCard, { backgroundColor: cardBackground }]}>
-        <ThemedText style={styles.planTitle}>Next step for AI</ThemedText>
-        <ThemedText style={styles.planText}>
-          Keep using Firebase on the free plan for login and realtime sync, then connect Gemini
-          later through a separate backend like Vercel, Railway, Render, or Cloud Run.
-        </ThemedText>
+    <ClayScreen
+      greeting="Progress view"
+      title="Study Stats"
+      subtitle="A soft, visual overview instead of a plain analytics page."
+      avatarLabel={profile?.avatarInitials ?? 'SL'} onRefresh={async () => { if (user) { await refreshMockLmsFeed(); } }}>
+      <View style={styles.statsRow}>
+        <ClayStatCard label="Completed" value={`${completed}`} />
+        <ClayStatCard label="Focus blocks" value={`${focusBlocks}`} />
       </View>
-    </AppScreen>
+      <View style={styles.statsRow}>
+        <ClayStatCard label="Open tasks" value={`${tasks.filter((task) => task.status !== 'done').length}`} />
+        <ClayStatCard label="Events" value={`${schedules.length}`} />
+      </View>
+
+      <ClaySectionHeader icon="bar-chart" title="Insights" />
+      <View style={styles.list}>
+        <ClayCard style={[styles.card, styles.purple]}>
+          <ThemedText style={styles.cardTitle}>Weekly trend</ThemedText>
+          <ThemedText style={styles.cardText}>Your streak and completed tasks are holding steady this week.</ThemedText>
+        </ClayCard>
+        <ClayCard style={[styles.card, styles.green]}>
+          <ThemedText style={styles.cardTitle}>Best window</ThemedText>
+          <ThemedText style={styles.cardText}>Your planner has the most open focus space in the late afternoon.</ThemedText>
+        </ClayCard>
+        <ClayCard style={[styles.card, styles.blue]}>
+          <ThemedText style={styles.cardTitle}>Study goal</ThemedText>
+          <ThemedText style={styles.cardText}>{profile?.preferences.studyGoalHours ?? 0} hours per day is your current target.</ThemedText>
+          <ClayPill style={styles.inlinePill}>
+            <ThemedText style={styles.pillText}>Adjust in Settings</ThemedText>
+          </ClayPill>
+        </ClayCard>
+      </View>
+    </ClayScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  infoButton: {
-    borderRadius: 18,
-    minHeight: 54,
-    paddingHorizontal: 18,
+  statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 12,
+  },
+  list: {
     gap: 10,
   },
-  infoButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  planCard: {
-    borderRadius: 22,
-    padding: 18,
+  card: {
     gap: 8,
   },
-  planTitle: {
+  cardTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '900',
+    color: '#2D2250',
   },
-  planText: {
-    fontSize: 14,
-    lineHeight: 20,
+  cardText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#6B5B8A',
+  },
+  purple: { backgroundColor: '#DDD0FF' },
+  green: { backgroundColor: '#C8F3D7' },
+  blue: { backgroundColor: '#CAE7FF' },
+  inlinePill: { alignSelf: 'flex-start', marginTop: 4 },
+  pillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6B5B8A',
   },
 });

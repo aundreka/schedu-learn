@@ -1,10 +1,7 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import { ClayCard, ClayPill, ClayScreen, ClaySectionHeader, ClayStatCard } from '@/components/clay-ui';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Colors, Fonts } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFirebaseBackend } from '@/providers/firebase-provider';
 
 function formatRelativeSyncTime(iso?: string) {
@@ -23,185 +20,92 @@ function formatRelativeSyncTime(iso?: string) {
 }
 
 export default function LmsSyncScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const palette = Colors[colorScheme];
-  const cardBackground = colorScheme === 'dark' ? '#1E2428' : '#F4F7FB';
-  const accentBackground = colorScheme === 'dark' ? '#143647' : '#DDF2FF';
-  const { lmsFeed, refreshMockLmsFeed, user } = useFirebaseBackend();
+  const { lmsFeed, profile, refreshMockLmsFeed, user } = useFirebaseBackend();
 
   const handleRefresh = async () => {
     try {
       await refreshMockLmsFeed();
+      Alert.alert('LMS Sync', 'Feed refreshed.');
     } catch (error) {
-      Alert.alert('LMS sync', error instanceof Error ? error.message : 'Unable to refresh LMS data.');
+      Alert.alert('LMS Sync', error instanceof Error ? error.message : 'Unable to refresh feed.');
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <ThemedText style={[styles.eyebrow, { color: palette.tint }]}>LMS Sync</ThemedText>
-        <ThemedText style={styles.title}>Live-looking feed of detected tasks</ThemedText>
-        <ThemedText style={[styles.subtitle, { color: palette.icon }]}>
-          Firestore listeners stream mock LMS activity so the data feels live while you wire up the
-          real integration later.
-        </ThemedText>
+    <ClayScreen
+      greeting="Sync center"
+      title="LMS Feed"
+      subtitle="Imported changes styled with the same dashboard formula."
+      avatarLabel={profile?.avatarInitials ?? 'SL'} onRefresh={async () => { if (user) { await refreshMockLmsFeed(); } }}>
+      <View style={styles.statsRow}>
+        <ClayStatCard label="Items" value={`${lmsFeed.length}`} />
+        <ClayStatCard label="Last sync" value={formatRelativeSyncTime(lmsFeed[0]?.syncedAt)} />
       </View>
 
-      <ThemedView style={[styles.syncBanner, { backgroundColor: accentBackground }]}>
-        <View style={styles.syncRow}>
-          <MaterialIcons name="sync" size={20} color={palette.tint} />
-          <ThemedText style={styles.syncTitle}>
-            Last checked {formatRelativeSyncTime(lmsFeed[0]?.syncedAt)}
-          </ThemedText>
-        </View>
-        <ThemedText style={styles.syncText}>
-          {user
-            ? `${lmsFeed.length} items detected across your live Firestore feed.`
-            : 'Sign in with Google to read live Firestore updates here.'}
-        </ThemedText>
-        <Pressable
-          accessibilityRole="button"
-          onPress={handleRefresh}
-          style={({ pressed }) => [
-            styles.refreshButton,
-            { backgroundColor: pressed ? palette.icon : palette.tint },
-          ]}>
-          <MaterialIcons name="cloud-sync" size={18} color="#FFFFFF" />
-          <ThemedText style={styles.refreshButtonText}>Pull mock LMS update</ThemedText>
-        </Pressable>
-      </ThemedView>
+      <ClaySectionHeader
+        icon="sync"
+        title="Detected Changes"
+        accessory={
+          <Pressable onPress={handleRefresh}>
+            <ClayPill>
+              <ThemedText style={styles.pillText}>Refresh</ThemedText>
+            </ClayPill>
+          </Pressable>
+        }
+      />
 
-      <View style={styles.feed}>
-        {lmsFeed.map((task) => (
-          <ThemedView key={task.id} style={[styles.feedCard, { backgroundColor: cardBackground }]}>
-            <View style={styles.feedHeader}>
-              <View style={[styles.sourceBadge, { backgroundColor: accentBackground }]}>
-                <ThemedText style={[styles.sourceText, { color: palette.tint }]}>
-                  {task.source}
-                </ThemedText>
-              </View>
-              <ThemedText style={[styles.statusText, { color: palette.icon }]}>{task.status}</ThemedText>
-            </View>
-            <ThemedText style={styles.taskTitle}>{task.title}</ThemedText>
-            <ThemedText style={[styles.courseText, { color: palette.icon }]}>{task.course}</ThemedText>
-            <View style={styles.dueRow}>
-              <MaterialIcons name="schedule" size={16} color={palette.tint} />
-              <ThemedText style={[styles.dueText, { color: palette.icon }]}>{task.due}</ThemedText>
-            </View>
-          </ThemedView>
+      <View style={styles.list}>
+        {lmsFeed.map((item, index) => (
+          <ClayCard
+            key={item.id}
+            style={[styles.card, index % 3 === 0 ? styles.orange : index % 3 === 1 ? styles.red : styles.blue]}>
+            <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
+            <ThemedText style={styles.cardText}>{item.due}</ThemedText>
+            <ThemedText style={styles.cardTag}>{item.source} · {item.status}</ThemedText>
+          </ClayCard>
         ))}
-        {!lmsFeed.length ? (
-          <ThemedView style={[styles.feedCard, { backgroundColor: cardBackground }]}>
-            <ThemedText style={styles.taskTitle}>No LMS items yet</ThemedText>
-            <ThemedText style={[styles.courseText, { color: palette.icon }]}>
-              Sign in from Profile, then pull a mock LMS update to seed live-looking sync data.
-            </ThemedText>
-          </ThemedView>
-        ) : null}
       </View>
-    </ScrollView>
+    </ClayScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    padding: 20,
-    paddingBottom: 120,
-    gap: 20,
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  header: {
+  list: {
     gap: 10,
   },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 13,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
+  card: {
+    gap: 6,
   },
-  title: {
-    fontFamily: Fonts.rounded,
-    fontSize: 32,
-    lineHeight: 38,
-    fontWeight: '700',
-  },
-  subtitle: {
+  cardTitle: {
     fontSize: 15,
-    lineHeight: 22,
+    fontWeight: '900',
+    color: '#2D2250',
   },
-  syncBanner: {
-    borderRadius: 22,
-    padding: 18,
-    gap: 10,
-  },
-  syncRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  syncTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  syncText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  refreshButton: {
-    marginTop: 4,
-    borderRadius: 16,
-    minHeight: 46,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  refreshButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  feed: {
-    gap: 12,
-  },
-  feedCard: {
-    borderRadius: 22,
-    padding: 18,
-    gap: 10,
-  },
-  feedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  sourceBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  sourceText: {
+  cardText: {
     fontSize: 12,
-    fontWeight: '700',
+    lineHeight: 18,
+    color: '#6B5B8A',
   },
-  statusText: {
-    fontSize: 12,
-    textTransform: 'uppercase',
+  cardTag: {
+    alignSelf: 'flex-start',
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6B5B8A',
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  taskTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+  pillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6B5B8A',
   },
-  courseText: {
-    fontSize: 14,
-  },
-  dueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dueText: {
-    fontSize: 14,
-  },
+  orange: { backgroundColor: '#FFE4B0' },
+  red: { backgroundColor: '#FFD7D7' },
+  blue: { backgroundColor: '#CAE7FF' },
 });

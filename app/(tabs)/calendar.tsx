@@ -1,81 +1,160 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Link } from 'expo-router';
-import { Pressable, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 
-import { AppScreen } from '@/components/app-screen';
+import { ClayCard, ClayPill, ClayScreen, ClaySectionHeader, ClayStatCard } from '@/components/clay-ui';
 import { ThemedText } from '@/components/themed-text';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFirebaseBackend } from '@/providers/firebase-provider';
 
-export default function CalendarScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const palette = Colors[colorScheme];
-  const { schedules, tasks } = useFirebaseBackend();
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
-  const agenda = schedules.slice(0, 3).map((item) => ({
-    title: item.title,
-    subtitle: `${item.location} - ${new Date(item.startsAt).toLocaleString([], {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    })}`,
-    icon: (
-      item.type === 'class' ? 'calendar-month' : item.type === 'study' ? 'groups' : 'event-note'
-    ) as keyof typeof MaterialIcons.glyphMap,
-  }));
+export default function CalendarScreen() {
+  const router = useRouter();
+  const { profile, refreshMockLmsFeed, schedules, tasks, user } = useFirebaseBackend();
+  const upcoming = schedules.slice(0, 6);
 
   return (
-    <AppScreen
-      eyebrow="Calendar"
-      title="See your learning week at a glance."
-      description="Track upcoming classes, deadlines, and review blocks without leaving your main workflow."
-      summary={[
-        { label: 'Schedule items', value: `${schedules.length}` },
-        { label: 'Deadlines', value: `${tasks.length}` },
-        { label: 'Focus blocks', value: `${schedules.filter((item) => item.type === 'study').length}` },
-        { label: 'Sync mode', value: 'Realtime' },
-      ]}
-      agenda={
-        agenda.length
-          ? agenda
-          : [
-              {
-                title: 'Connect Firebase',
-                subtitle: 'Your schedule will stream in here with Firestore listeners.',
-                icon: 'calendar-month',
-              },
-            ]
-      }>
-      <Link href="/lms-sync" asChild>
-        <Pressable
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.syncButton,
-            { backgroundColor: pressed ? palette.icon : palette.tint },
-          ]}>
-          <MaterialIcons name="sync" size={20} color="#FFFFFF" />
-          <ThemedText style={styles.syncButtonText}>LMS Sync</ThemedText>
-        </Pressable>
-      </Link>
-    </AppScreen>
+    <ClayScreen
+      greeting="Calendar view"
+      title="Your Learning Week"
+      subtitle="A softer planner view for classes, study blocks, and reschedules."
+      avatarLabel={profile?.avatarInitials ?? 'SL'}
+      onAvatarPress={() => router.push('/profile')} onRefresh={async () => { if (user) { await refreshMockLmsFeed(); } }}>
+      <View style={styles.statsRow}>
+        <ClayStatCard label="Events" value={`${schedules.length}`} />
+        <ClayStatCard label="Deadlines" value={`${tasks.filter((task) => task.status !== 'done').length}`} />
+      </View>
+
+      <ClaySectionHeader
+        icon="calendar-month"
+        title="Upcoming Agenda"
+        accessory={
+          <ClayPill>
+            <ThemedText style={styles.pillText}>Realtime</ThemedText>
+          </ClayPill>
+        }
+      />
+
+      <View style={styles.list}>
+        {upcoming.map((item, index) => (
+          <ClayCard
+            key={item.id}
+            style={[
+              styles.eventCard,
+              index % 4 === 0
+                ? styles.purple
+                : index % 4 === 1
+                  ? styles.blue
+                  : index % 4 === 2
+                    ? styles.green
+                    : styles.orange,
+            ]}>
+            <View style={styles.eventHeader}>
+              <View style={styles.iconBadge}>
+                <MaterialIcons
+                  name={item.type === 'class' ? 'groups' : item.type === 'study' ? 'menu-book' : 'event-note'}
+                  size={16}
+                  color="#2D2250"
+                />
+              </View>
+              <ThemedText style={styles.eventTitle}>{item.title}</ThemedText>
+            </View>
+            <ThemedText style={styles.eventMeta}>{formatDateTime(item.startsAt)}</ThemedText>
+            <ThemedText style={styles.eventTag}>{item.location}</ThemedText>
+          </ClayCard>
+        ))}
+      </View>
+
+      <ClaySectionHeader icon="sync" title="LMS" />
+      <ClayCard style={styles.whiteCard}>
+        <ThemedText style={styles.cardTitle}>Keep calendar and LMS in sync</ThemedText>
+        <ThemedText style={styles.cardText}>
+          Review imported changes and pushed schedule updates from one place.
+        </ThemedText>
+        <ClayPill style={styles.actionPill}>
+          <ThemedText style={styles.pillText} onPress={() => router.push('/lms-sync')}>
+            Open LMS Sync
+          </ThemedText>
+        </ClayPill>
+      </ClayCard>
+    </ClayScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  syncButton: {
-    borderRadius: 18,
-    minHeight: 54,
-    paddingHorizontal: 18,
+  statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 12,
+  },
+  list: {
     gap: 10,
   },
-  syncButtonText: {
-    color: '#FFFFFF',
+  eventCard: {
+    gap: 8,
+  },
+  eventHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#2D2250',
+  },
+  eventMeta: {
+    fontSize: 12,
+    color: '#6B5B8A',
+  },
+  eventTag: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    fontSize: 10,
+    color: '#6B5B8A',
+    fontWeight: '800',
+  },
+  purple: { backgroundColor: '#DDD0FF' },
+  blue: { backgroundColor: '#CAE7FF' },
+  green: { backgroundColor: '#C8F3D7' },
+  orange: { backgroundColor: '#FFE4B0' },
+  whiteCard: { backgroundColor: '#FFFFFF' },
+  cardTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '900',
+    color: '#2D2250',
+  },
+  cardText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#6B5B8A',
+    marginTop: 6,
+  },
+  actionPill: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+  },
+  pillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6B5B8A',
   },
 });

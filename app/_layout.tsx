@@ -14,42 +14,15 @@ export default function RootLayout() {
   return (
     <FirebaseProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
+        <Stack screenOptions={{ contentStyle: { backgroundColor: palette.background } }}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="profile"
-            options={{
-              title: 'Profile',
-              headerShadowVisible: false,
-              headerStyle: {
-                backgroundColor: palette.background,
-              },
-            }}
-          />
-          <Stack.Screen
-            name="settings"
-            options={{
-              title: 'Settings',
-              headerShadowVisible: false,
-              headerStyle: {
-                backgroundColor: palette.background,
-              },
-            }}
-          />
-          <Stack.Screen
-            name="lms-sync"
-            options={{
-              title: 'LMS Sync',
-              headerShadowVisible: false,
-              headerStyle: {
-                backgroundColor: palette.background,
-              },
-            }}
-          />
+          <Stack.Screen name="profile" options={{ headerShown: false }} />
+          <Stack.Screen name="settings" options={{ headerShown: false }} />
+          <Stack.Screen name="lms-sync" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
-        <StatusBar style="auto" />
+        <StatusBar style="dark" />
       </ThemeProvider>
     </FirebaseProvider>
   );

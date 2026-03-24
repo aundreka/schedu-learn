@@ -11,16 +11,15 @@ import {
   View,
 } from 'react-native';
 
+import { ClayCard, ClayPill, ClayScreen } from '@/components/clay-ui';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Fonts } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFirebaseBackend } from '@/providers/firebase-provider';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const palette = Colors[colorScheme];
-  const cardBackground = colorScheme === 'dark' ? '#1E2428' : '#F4F7FB';
-  const inputBackground = colorScheme === 'dark' ? '#11181C' : '#FFFFFF';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -44,155 +43,95 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.container}>
-      <View style={styles.header}>
-        <ThemedText style={[styles.eyebrow, { color: palette.tint }]}>SchedU Learn</ThemedText>
-        <ThemedText style={styles.title}>Log in</ThemedText>
-        <ThemedText style={[styles.subtitle, { color: palette.icon }]}>
-          Use email and password for now while Google sign-in is paused.
-        </ThemedText>
-      </View>
-
-      <View style={[styles.card, { backgroundColor: cardBackground }]}>
-        <View style={styles.fieldGroup}>
-          <ThemedText style={styles.label}>Email</ThemedText>
-          <TextInput
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            onChangeText={setEmail}
-            placeholder="student@example.com"
-            placeholderTextColor={palette.icon}
-            style={[
-              styles.input,
-              {
-                backgroundColor: inputBackground,
-                borderColor: palette.icon,
-                color: palette.text,
-              },
-            ]}
-            value={email}
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <ThemedText style={styles.label}>Password</ThemedText>
-          <TextInput
-            autoCapitalize="none"
-            onChangeText={setPassword}
-            placeholder="Enter your password"
-            placeholderTextColor={palette.icon}
-            secureTextEntry
-            style={[
-              styles.input,
-              {
-                backgroundColor: inputBackground,
-                borderColor: palette.icon,
-                color: palette.text,
-              },
-            ]}
-            value={password}
-          />
-        </View>
-
-        {authMessage ? (
-          <ThemedText style={[styles.helperText, { color: palette.icon }]}>{authMessage}</ThemedText>
-        ) : null}
-
-        <Pressable
-          accessibilityRole="button"
-          onPress={handleLogin}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            { backgroundColor: pressed ? palette.icon : palette.tint },
-          ]}>
-          {submitting ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <ThemedText style={styles.primaryButtonText}>Log in</ThemedText>
-          )}
-        </Pressable>
-
-        <Link href="/signup" asChild>
-          <Pressable style={styles.linkButton}>
-            <ThemedText style={[styles.linkText, { color: palette.tint }]}>
-              Need an account? Create one
-            </ThemedText>
+    <ClayScreen greeting="Welcome back" title="Log In" subtitle="The same soft dashboard style starts right here." onRefresh={async () => {}}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ClayCard style={styles.card}>
+          <View style={styles.fieldGroup}>
+            <ThemedText style={styles.label}>Email</ThemedText>
+            <TextInput
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              onChangeText={setEmail}
+              placeholder="student@example.com"
+              placeholderTextColor={palette.icon}
+              style={styles.input}
+              value={email}
+            />
+          </View>
+          <View style={styles.fieldGroup}>
+            <ThemedText style={styles.label}>Password</ThemedText>
+            <TextInput
+              autoCapitalize="none"
+              onChangeText={setPassword}
+              placeholder="Enter your password"
+              placeholderTextColor={palette.icon}
+              secureTextEntry
+              style={styles.input}
+              value={password}
+            />
+          </View>
+          {authMessage ? <ThemedText style={styles.helper}>{authMessage}</ThemedText> : null}
+          <Pressable onPress={handleLogin} style={styles.primaryButton}>
+            {submitting ? <ActivityIndicator color="#FFFFFF" /> : <ThemedText style={styles.primaryText}>Log in</ThemedText>}
           </Pressable>
-        </Link>
-      </View>
-    </KeyboardAvoidingView>
+          <Link href="/signup" asChild>
+            <Pressable>
+              <ClayPill style={styles.centerPill}>
+                <ThemedText style={styles.linkText}>Need an account? Create one</ThemedText>
+              </ClayPill>
+            </Pressable>
+          </Link>
+        </ClayCard>
+      </KeyboardAvoidingView>
+    </ClayScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    gap: 24,
-  },
-  header: {
-    gap: 10,
-  },
-  eyebrow: {
-    fontFamily: Fonts.mono,
-    fontSize: 13,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  title: {
-    fontFamily: Fonts.rounded,
-    fontSize: 34,
-    lineHeight: 40,
-    fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
   card: {
-    borderRadius: 24,
-    padding: 20,
-    gap: 16,
+    gap: 14,
   },
   fieldGroup: {
     gap: 8,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#2D2250',
   },
   input: {
     minHeight: 54,
     borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.82)',
     borderWidth: 1,
+    borderColor: 'rgba(168,153,200,0.45)',
     paddingHorizontal: 16,
     fontSize: 15,
+    color: '#2D2250',
   },
-  helperText: {
-    fontSize: 13,
-    lineHeight: 18,
+  helper: {
+    fontSize: 12,
+    color: '#6B5B8A',
   },
   primaryButton: {
     minHeight: 54,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#7A55B0',
   },
-  primaryButtonText: {
+  primaryText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '900',
   },
-  linkButton: {
-    alignItems: 'center',
-    paddingVertical: 8,
+  centerPill: {
+    alignSelf: 'center',
   },
   linkText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6B5B8A',
   },
 });
