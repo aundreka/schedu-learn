@@ -109,10 +109,10 @@ async function generateFlashcardsFromPDF(
   }
 
   const data = await response.json() as {
-    candidates?: Array<{
-      content?: { parts?: Array<{ text?: string }> };
+    candidates?: {
+      content?: { parts?: { text?: string }[] };
       finishReason?: string;
-    }>;
+    }[];
     error?: { message?: string };
   };
 
@@ -173,7 +173,7 @@ function parseFlashcards(raw: string): Flashcard[] {
     throw new Error('Gemini returned JSON but it was not an array of flashcards.');
   }
 
-  const cards = (parsed as Array<Record<string, unknown>>)
+  const cards = (parsed as Record<string, unknown>[])
     .filter(
       (item) =>
         typeof item.question === 'string' &&

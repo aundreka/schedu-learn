@@ -1,5 +1,5 @@
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 
 import { ClayScreen, ClayCard } from '@/components/clay-ui';
 import { ThemedText } from '@/components/themed-text';

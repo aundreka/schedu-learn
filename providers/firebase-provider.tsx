@@ -16,21 +16,25 @@ import {
   backend,
   clearImportedEafClassSchedules as clearImportedEafClassSchedulesData,
   completeOnboarding,
+  connectLms,
   createRecurringClassSchedules as createRecurringClassSchedulesData,
   createTask,
   createTaskAndSchedule,
   ensureUserWorkspace,
+  fetchGroupStudySlots,
   mapPreferences,
   mapProfile,
   mapTask,
   moveSchedule,
   refreshLmsFeed,
   resetCurrentUserData,
+  resetLmsDemo,
   subscribeToLmsFeed,
   subscribeToPreferences,
   subscribeToProfile,
   subscribeToSchedules,
   subscribeToTasks,
+  syncOpenLmsFeed,
   updatePreferences,
   updateProfile as updateBackendProfile,
   updateTask,
@@ -42,6 +46,8 @@ import type {
   CreateTaskInput,
   EafImportItem,
   ExtractedClass,
+  GroupStudySlot,
+  LmsConnectionInput,
   LmsFeedItem,
   ScheduleDraft,
   ScheduleItem,
@@ -86,11 +92,15 @@ type FirebaseContextValue = Omit<
   autoScheduleTask: (taskId: string) => Promise<ScheduleDraft[]>;
   regenerateFutureStudyPlanForTask: (taskId: string) => Promise<ScheduleDraft[]>;
 
+  connectLms: (credentials: LmsConnectionInput) => Promise<void>;
   syncLmsFeed: () => Promise<void>;
+  syncOpenLmsFeed: () => Promise<void>;
   refreshMockLmsFeed: () => Promise<void>; // temporary alias for compatibility
+  resetLmsDemo: () => Promise<void>;
   createTaskFromLmsFeed: (feedId: string) => Promise<TaskItem>;
   markLmsFeedItemReviewed: (feedId: string) => Promise<void>;
   dismissLmsFeedItem: (feedId: string) => Promise<void>;
+  fetchGroupStudySlots: () => Promise<GroupStudySlot[]>;
 
   uploadEafFile: (params: { fileUri: string; blob: Blob; filename: string }) => Promise<EafImportItem>;
   saveParsedEafClasses: (importId: string, extractedClasses: ExtractedClass[], extractedText?: string) => Promise<void>;
@@ -290,6 +300,26 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
       setTaskStatus: async (taskId, status) => {
         if (!user) throw new Error('Sign in first to update tasks.');
         await updateTaskStatus(user.uid, taskId, status);
+      },
+
+      connectLms: async (credentials: LmsConnectionInput) => {
+        if (!user) throw new Error('Sign in first to connect LMS.');
+        await connectLms(user.uid, credentials);
+      },
+
+      syncOpenLmsFeed: async () => {
+        if (!user) throw new Error('Sign in first to sync LMS items.');
+        await syncOpenLmsFeed(user.uid);
+      },
+
+      resetLmsDemo: async () => {
+        if (!user) throw new Error('Sign in first to reset LMS demo data.');
+        await resetLmsDemo(user.uid);
+      },
+
+      fetchGroupStudySlots: async () => {
+        if (!user) throw new Error('Sign in first to load group study slots.');
+        return fetchGroupStudySlots(user.uid);
       },
 
       syncLmsFeed: async () => {

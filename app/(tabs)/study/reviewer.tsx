@@ -84,7 +84,10 @@ async function generateReviewFromPDF(
   }
 
   const data = await response.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
+    candidates?: {
+      content?: { parts?: { text?: string }[] };
+      finishReason?: string;
+    }[];
     error?: { message?: string };
   };
 
@@ -111,7 +114,7 @@ function parseSections(raw: string): ReviewSection[] {
 
   if (!Array.isArray(parsed)) throw new Error('Response was not an array.');
 
-  return (parsed as Array<Record<string, unknown>>)
+  return (parsed as Record<string, unknown>[])
     .filter((item) =>
       typeof item.title   === 'string' && item.title.trim() &&
       typeof item.summary === 'string' && item.summary.trim() &&
@@ -427,7 +430,11 @@ export default function ReviewerScreen() {
   const toggleRead = (index: number) => {
     setReadSet((prev) => {
       const next = new Set(prev);
-      next.has(index) ? next.delete(index) : next.add(index);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
       return next;
     });
   };

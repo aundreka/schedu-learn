@@ -26,7 +26,7 @@ const ENCOURAGEMENTS = [
   { emoji: '🌟', text: "Halfway there! Biscuit saved you a spot." },
   { emoji: '🍖', text: "Biscuit says: finish strong and he'll do a happy dance." },
   { emoji: '📚', text: 'Every second counts. Biscuit believes in you.' },
-  { emoji: '🐕', text: "Biscuit's ears perk up every time you study." },
+  { emoji: '🐕', text: 'Biscuit’s ears perk up every time you study.' },
   { emoji: '✨', text: "You're building something great. One minute at a time." },
 ];
 
@@ -305,9 +305,9 @@ export default function FocusScreen() {
         <>
           <ClayCard style={[styles.card, styles.green]}>
             <ThemedText style={styles.completeTitle}>🐾 Biscuit is thrilled!</ThemedText>
-            <ThemedText style={styles.completeText}>
-              You completed a {customDuration}-minute focus session. Biscuit's energy is refilling!
-            </ThemedText>
+              <ThemedText style={styles.completeText}>
+                You completed a {customDuration}-minute focus session. Biscuit’s energy is refilling!
+              </ThemedText>
             <ThemedText style={styles.rewardText}>+25 XP · Hunger +20</ThemedText>
           </ClayCard>
           <View style={styles.buttonRow}>

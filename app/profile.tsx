@@ -115,7 +115,7 @@ export default function ProfileScreen() {
   } = useFirebaseBackend();
 
   const onboardingDone = profile?.onboardingCompleted ?? false;
-const navigation = useNavigation();
+  const navigation = useNavigation();
   const existingClasses = useMemo(() => schedules.filter((item) => item.type === 'class'), [schedules]);
   const existingClassCount = existingClasses.length;
 
@@ -148,10 +148,45 @@ const navigation = useNavigation();
   const [classLocation, setClassLocation] = useState('');
   const [pendingClasses, setPendingClasses] = useState<ExtractedClass[]>([]);
 
-  const pageWidth = width - 32;
-  const cardWidth = Math.min(pageWidth - 8, 500);
-  const cardHeight = Math.max(560, height - 210);
-    const stepAnim = useRef(new Animated.Value(1)).current;
+  const SCREEN_PADDING_HORIZONTAL = 20;
+  const availableWidth = Math.max(width - SCREEN_PADDING_HORIZONTAL * 2, 0);
+  const isCompact = width <= 420;
+  const horizontalMargin = isCompact ? 12 : 18;
+  const pageWidth = availableWidth;
+  const availableCardWidth = pageWidth - horizontalMargin * 2 - (isCompact ? 0 : 12);
+  const cardWidth = Math.min(Math.max(availableCardWidth, 280), 360);
+  const cardHeight = Math.max(isCompact ? 420 : 520, height - (isCompact ? 200 : 240));
+  const cardPadding = isCompact ? 12 : 16;
+  const cardGap = isCompact ? 10 : 12;
+  const navButtonMinWidth = isCompact ? 96 : 112;
+  const navButtonPadding = isCompact ? 12 : 16;
+  const actionGap = isCompact ? 4 : 6;
+  const bigInputMinHeight = isCompact ? 50 : 58;
+  const inputMinHeight = isCompact ? 44 : 50;
+  const dayChipPadding = isCompact ? 8 : 10;
+  const emojiSize = isCompact ? 42 : 48;
+  const emojiLineHeight = isCompact ? 48 : 56;
+  const accountGap = isCompact ? 8 : 10;
+  const accountTopMargin = isCompact ? 12 : 18;
+
+  const inputStyle = { minHeight: inputMinHeight };
+  const bigInputStyle = { minHeight: bigInputMinHeight };
+  const emojiStyle = { fontSize: emojiSize, lineHeight: emojiLineHeight };
+  const primaryButtonStyle = {
+    minWidth: navButtonMinWidth,
+    paddingHorizontal: navButtonPadding,
+    gap: actionGap,
+  };
+  const secondaryButtonStyle = {
+    minWidth: navButtonMinWidth,
+    paddingHorizontal: navButtonPadding,
+    gap: actionGap,
+  };
+  const accountActionsStyle = {
+    marginTop: accountTopMargin,
+    gap: accountGap,
+  };
+  const stepAnim = useRef(new Animated.Value(1)).current;
   const pageAnim = useRef(new Animated.Value(1)).current;
 
   const derivedSubjects = useMemo(() => {
@@ -389,13 +424,13 @@ const navigation = useNavigation();
       case 'displayName':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <TextInput
               value={displayName}
               onChangeText={setDisplayName}
               placeholder="Your name"
               placeholderTextColor="#A899C8"
-              style={styles.bigInput}
+              style={[styles.bigInput, bigInputStyle]}
             />
           </View>
         );
@@ -403,7 +438,7 @@ const navigation = useNavigation();
       case 'yearLevel':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <View style={styles.choiceGrid}>
               {YEAR_LEVELS.map((option) => (
                 <Pressable
@@ -425,14 +460,14 @@ const navigation = useNavigation();
       case 'studyGoalHours':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <TextInput
               value={studyGoalHours}
               onChangeText={setStudyGoalHours}
               keyboardType="number-pad"
               placeholder="2"
               placeholderTextColor="#A899C8"
-              style={styles.bigInput}
+              style={[styles.bigInput, bigInputStyle]}
             />
           </View>
         );
@@ -440,14 +475,14 @@ const navigation = useNavigation();
       case 'preferredSessionMinutes':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <TextInput
               value={preferredSessionMinutes}
               onChangeText={setPreferredSessionMinutes}
               keyboardType="number-pad"
               placeholder="45"
               placeholderTextColor="#A899C8"
-              style={styles.bigInput}
+              style={[styles.bigInput, bigInputStyle]}
             />
           </View>
         );
@@ -455,14 +490,14 @@ const navigation = useNavigation();
       case 'shortBreakMinutes':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <TextInput
               value={shortBreakMinutes}
               onChangeText={setShortBreakMinutes}
               keyboardType="number-pad"
               placeholder="15"
               placeholderTextColor="#A899C8"
-              style={styles.bigInput}
+              style={[styles.bigInput, bigInputStyle]}
             />
           </View>
         );
@@ -470,14 +505,14 @@ const navigation = useNavigation();
       case 'sleepStartHour':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <TextInput
               value={sleepStartHour}
               onChangeText={setSleepStartHour}
               keyboardType="number-pad"
               placeholder="23"
               placeholderTextColor="#A899C8"
-              style={styles.bigInput}
+              style={[styles.bigInput, bigInputStyle]}
             />
           </View>
         );
@@ -485,14 +520,14 @@ const navigation = useNavigation();
       case 'sleepEndHour':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <TextInput
               value={sleepEndHour}
               onChangeText={setSleepEndHour}
               keyboardType="number-pad"
               placeholder="7"
               placeholderTextColor="#A899C8"
-              style={styles.bigInput}
+              style={[styles.bigInput, bigInputStyle]}
             />
           </View>
         );
@@ -500,14 +535,14 @@ const navigation = useNavigation();
       case 'startHour':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <TextInput
               value={startHour}
               onChangeText={setStartHour}
               keyboardType="number-pad"
               placeholder="8"
               placeholderTextColor="#A899C8"
-              style={styles.bigInput}
+              style={[styles.bigInput, bigInputStyle]}
             />
           </View>
         );
@@ -515,14 +550,14 @@ const navigation = useNavigation();
       case 'endHour':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <TextInput
               value={endHour}
               onChangeText={setEndHour}
               keyboardType="number-pad"
               placeholder="21"
               placeholderTextColor="#A899C8"
-              style={styles.bigInput}
+              style={[styles.bigInput, bigInputStyle]}
             />
           </View>
         );
@@ -530,14 +565,14 @@ const navigation = useNavigation();
       case 'maxSessionsPerDay':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <TextInput
               value={maxSessionsPerDay}
               onChangeText={setMaxSessionsPerDay}
               keyboardType="number-pad"
               placeholder="4"
               placeholderTextColor="#A899C8"
-              style={styles.bigInput}
+              style={[styles.bigInput, bigInputStyle]}
             />
           </View>
         );
@@ -545,7 +580,7 @@ const navigation = useNavigation();
       case 'avoidBackToBackHard':
         return (
           <View style={styles.quizBody}>
-            <ThemedText style={styles.bigEmoji}>{quizMeta.emoji}</ThemedText>
+            <ThemedText style={[styles.bigEmoji, emojiStyle]}>{quizMeta.emoji}</ThemedText>
             <View style={styles.choiceGrid}>
               <Pressable
                 onPress={() => setAvoidBackToBackHard(true)}
@@ -571,25 +606,23 @@ const navigation = useNavigation();
   };
 
   return (
-<ClayScreen
-  greeting={onboardingDone ? 'Profile' : 'Getting started'}
-  title={onboardingDone ? (profile?.displayName ?? 'Your Profile') : 'Set up your study system'}
-  subtitle=""
-  avatarLabel={profile?.avatarInitials ?? 'SL'}
-  onRefresh={async () => {
-    if (user) {
-      await refreshMockLmsFeed();
-    }
-  }}
->
-{onboardingDone && (
-  <View style={{ marginBottom: 10, alignItems: 'flex-start' }}>
-    <Pressable onPress={() => navigation.goBack()} style={styles.secondaryButton}>
-      <MaterialIcons name="arrow-back" size={18} color="#6B5B8A" />
-      <ThemedText style={styles.secondaryButtonText}>Back</ThemedText>
-    </Pressable>
-  </View>
-)}
+      <ClayScreen
+        greeting={onboardingDone ? 'Profile' : 'Getting started'}
+        title={onboardingDone ? (profile?.displayName ?? 'Your Profile') : 'Set up your study system'}
+        subtitle=""
+        avatarLabel={profile?.avatarInitials ?? 'SL'}
+        onRefresh={async () => {
+          if (user) {
+            await refreshMockLmsFeed();
+          }
+        }}>
+      {onboardingDone && (
+        <View style={styles.backButtonWrapper}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.minimalBackButton}>
+            <MaterialIcons name="arrow-back-ios" size={20} color="#6B5B8A" />
+          </Pressable>
+        </View>
+      )}
       <ScrollView
         ref={pagerRef}
         horizontal
@@ -598,10 +631,11 @@ const navigation = useNavigation();
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.pagerContent}>
         <View style={[styles.page, { width: pageWidth }]}>
-                    <Animated.View
+          <Animated.View
             style={[
               styles.pageInner,
               {
+                paddingHorizontal: horizontalMargin,
                 transform: [{ scale: pageAnim }],
                 opacity: pageAnim,
               },
@@ -616,14 +650,23 @@ const navigation = useNavigation();
                 </View>
               </View>
 
-              <ClayCard style={[styles.mainCard, { width: cardWidth, minHeight: cardHeight }]}>
+              <ClayCard
+                style={[
+                  styles.mainCard,
+                  {
+                    width: cardWidth,
+                    minHeight: cardHeight,
+                    padding: cardPadding,
+                    gap: cardGap,
+                  },
+                ]}>
                 <View style={styles.stackHeader}>
                   <ThemedText style={styles.stackEyebrow}>STEP 1</ThemedText>
                   <ThemedText style={styles.stackTitle}>Add your schedule</ThemedText>
                 </View>
 
                 <View style={styles.scheduleTopActions}>
-                  <Pressable onPress={handlePickEaf} style={styles.secondaryButton}>
+                  <Pressable onPress={handlePickEaf} style={[styles.secondaryButton, secondaryButtonStyle]}>
                     <MaterialIcons name="upload-file" size={18} color="#6B5B8A" />
                     <ThemedText numberOfLines={1} style={styles.secondaryButtonText}>
                       {pickedEafName ? 'PDF added' : 'Upload PDF'}
@@ -642,7 +685,7 @@ const navigation = useNavigation();
                     onChangeText={setClassSubject}
                     placeholder="Subject"
                     placeholderTextColor="#A899C8"
-                    style={styles.input}
+                    style={[styles.input, inputStyle]}
                   />
 
                   <View style={styles.daysWrap}>
@@ -652,7 +695,14 @@ const navigation = useNavigation();
                         <Pressable
                           key={day}
                           onPress={() => toggleWeekday(day)}
-                          style={[styles.dayChip, active ? styles.choiceChipActive : null]}>
+                          style={[
+                            styles.dayChip,
+                            {
+                              paddingHorizontal: dayChipPadding,
+                              paddingVertical: dayChipPadding,
+                            },
+                            active ? styles.choiceChipActive : null,
+                          ]}>
                           <ThemedText style={[styles.dayChipText, active ? styles.choiceTextActive : null]}>
                             {day}
                           </ThemedText>
@@ -667,14 +717,14 @@ const navigation = useNavigation();
                       onChangeText={setClassStart}
                       placeholder="08:00"
                       placeholderTextColor="#A899C8"
-                      style={[styles.input, styles.half]}
+                      style={[styles.input, styles.half, inputStyle]}
                     />
                     <TextInput
                       value={classEnd}
                       onChangeText={setClassEnd}
                       placeholder="09:00"
                       placeholderTextColor="#A899C8"
-                      style={[styles.input, styles.half]}
+                      style={[styles.input, styles.half, inputStyle]}
                     />
                   </View>
 
@@ -683,10 +733,10 @@ const navigation = useNavigation();
                     onChangeText={setClassLocation}
                     placeholder="Location (optional)"
                     placeholderTextColor="#A899C8"
-                    style={styles.input}
+                    style={[styles.input, inputStyle]}
                   />
 
-                  <Pressable onPress={handleAddClass} style={styles.actionButton}>
+                  <Pressable onPress={handleAddClass} style={[styles.actionButton, primaryButtonStyle]}>
                     <ThemedText style={styles.actionButtonText}>Add class</ThemedText>
                   </Pressable>
                 </View>
@@ -725,7 +775,7 @@ const navigation = useNavigation();
                       }
                       goToPage(1);
                     }}
-                    style={styles.actionButton}>
+                    style={[styles.actionButton, primaryButtonStyle]}>
                     <ThemedText style={styles.actionButtonText}>Next</ThemedText>
                   </Pressable>
                 </View>
@@ -739,11 +789,21 @@ const navigation = useNavigation();
             style={[
               styles.pageInner,
               {
+                paddingHorizontal: horizontalMargin,
                 transform: [{ scale: pageAnim }],
                 opacity: pageAnim,
               },
             ]}>
-            <ClayCard style={[styles.mainCard, { width: cardWidth, minHeight: cardHeight }]}>
+            <ClayCard
+              style={[
+                styles.mainCard,
+                {
+                  width: cardWidth,
+                  minHeight: cardHeight,
+                  padding: cardPadding,
+                  gap: cardGap,
+                },
+              ]}>
               <View style={styles.quizHeader}>
                 <ThemedText style={styles.stackEyebrow}>STEP 2</ThemedText>
                 <ThemedText style={styles.stackTitle}>Study profile</ThemedText>
@@ -783,13 +843,13 @@ const navigation = useNavigation();
 
               <View style={styles.bottomNav}>
                 {quizIndex === 0 ? (
-                  <Pressable onPress={() => goToPage(0)} style={styles.secondaryButton}>
+                  <Pressable onPress={() => goToPage(0)} style={[styles.secondaryButton, secondaryButtonStyle]}>
                     <ThemedText style={styles.secondaryButtonText}>Back</ThemedText>
                   </Pressable>
                 ) : (
                   <Pressable
                     onPress={() => animateQuizForward(Math.max(0, quizIndex - 1))}
-                    style={styles.secondaryButton}>
+                    style={[styles.secondaryButton, secondaryButtonStyle]}>
                     <ThemedText style={styles.secondaryButtonText}>Back</ThemedText>
                   </Pressable>
                 )}
@@ -803,11 +863,14 @@ const navigation = useNavigation();
                       }
                       animateQuizForward(Math.min(QUIZ_STEPS.length - 1, quizIndex + 1));
                     }}
-                    style={styles.actionButton}>
+                    style={[styles.actionButton, primaryButtonStyle]}>
                     <ThemedText style={styles.actionButtonText}>Next</ThemedText>
                   </Pressable>
                 ) : (
-                  <Pressable onPress={handleSaveOnboarding} disabled={saving} style={styles.actionButton}>
+                  <Pressable
+                    onPress={handleSaveOnboarding}
+                    disabled={saving}
+                    style={[styles.actionButton, primaryButtonStyle]}>
                     <ThemedText style={styles.actionButtonText}>
                       {saving ? 'Saving...' : onboardingDone ? 'Update' : 'Finish'}
                     </ThemedText>
@@ -819,7 +882,7 @@ const navigation = useNavigation();
         </View>
       </ScrollView>
 
-      <View style={styles.accountActions}>
+      <View style={[styles.accountActions, accountActionsStyle]}>
         <Pressable onPress={() => router.push('/settings')}>
           <ClayCard style={[styles.smallActionCard, styles.purpleCard]}>
             <ThemedText style={styles.smallActionText}>Settings</ThemedText>
@@ -837,6 +900,12 @@ const navigation = useNavigation();
             <ThemedText style={styles.smallActionText}>Sign out</ThemedText>
           </ClayCard>
         </Pressable>
+
+        <Pressable onPress={() => router.push('/lms-sync')}>
+          <ClayCard style={[styles.smallActionCard, styles.greenCard]}>
+            <ThemedText style={styles.smallActionText}>Open LMS sync</ThemedText>
+          </ClayCard>
+        </Pressable>
       </View>
     </ClayScreen>
   );
@@ -846,6 +915,7 @@ const styles = StyleSheet.create({
   pagerContent: {
     alignItems: 'center',
   },
+
 
   page: {
     justifyContent: 'center',
@@ -876,9 +946,9 @@ const styles = StyleSheet.create({
   },
   mainCard: {
     borderRadius: 26,
-    padding: 18,
+    padding: 16,
     justifyContent: 'space-between',
-    gap: 14,
+    gap: 12,
   },
   stackHeader: {
     gap: 4,
@@ -901,41 +971,41 @@ const styles = StyleSheet.create({
     color: '#6B5B8A',
   },
   scheduleTopActions: {
-    gap: 8,
+    gap: 6,
   },
   microText: {
     fontSize: 12,
     color: '#8D7AB4',
   },
   formBlock: {
-    gap: 12,
+    gap: 10,
   },
   input: {
-    minHeight: 50,
+    minHeight: 44,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(122,85,176,0.10)',
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: '#2D2250',
+    fontWeight: '700',
+  },
+  bigInput: {
+    minHeight: 54,
+    width: '100%',
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.82)',
     borderWidth: 1,
     borderColor: 'rgba(122,85,176,0.10)',
     paddingHorizontal: 14,
-    fontSize: 15,
-    color: '#2D2250',
-    fontWeight: '700',
-  },
-  bigInput: {
-    minHeight: 58,
-    width: '100%',
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.82)',
-    borderWidth: 1,
-    borderColor: 'rgba(122,85,176,0.10)',
-    paddingHorizontal: 16,
-    fontSize: 18,
+    fontSize: 16,
     color: '#2D2250',
     fontWeight: '800',
   },
   row: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   half: {
     flex: 1,
@@ -943,12 +1013,10 @@ const styles = StyleSheet.create({
   daysWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   dayChip: {
-    minWidth: 50,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    minWidth: 46,
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.68)',
     borderWidth: 1,
@@ -969,8 +1037,8 @@ const styles = StyleSheet.create({
   },
   classList: {
     flex: 1,
-    gap: 8,
-    minHeight: 120,
+    gap: 6,
+    minHeight: 100,
   },
   pendingRow: {
     flexDirection: 'row',
@@ -1002,8 +1070,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.42)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    minHeight: 128,
+    gap: 6,
+    minHeight: 100,
   },
   emptyText: {
     fontSize: 14,
@@ -1015,8 +1083,8 @@ const styles = StyleSheet.create({
   },
   quizMain: {
     flex: 1,
-    justifyContent: 'center',
-    gap: 18,
+    justifyContent: 'flex-start',
+    gap: 16,
     overflow: 'visible',
   },
  quizTitleRow: {
@@ -1034,24 +1102,24 @@ const styles = StyleSheet.create({
   },
   quizBody: {
     alignItems: 'center',
-    gap: 18,
-    paddingTop: 6,
+    gap: 14,
+    paddingTop: 4,
     overflow: 'visible',
   },
   bigEmoji: {
-    fontSize: 48,
+    fontSize: 44,
     textAlign: 'center',
-    lineHeight: 56,
+    lineHeight: 52,
     includeFontPadding: true,
   },
   choiceGrid: {
     width: '100%',
-    gap: 10,
+    gap: 8,
   },
   largeChoiceChip: {
-    minHeight: 52,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    minHeight: 46,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.68)',
     borderWidth: 1,
@@ -1080,18 +1148,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   actionButton: {
-    minHeight: 48,
-    borderRadius: 16,
+    minHeight: 44,
+    borderRadius: 14,
     backgroundColor: '#7A55B0',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    minWidth: 112,
+    paddingHorizontal: 14,
+    minWidth: 96,
     flexDirection: 'row',
-    gap: 6,
+    gap: 4,
   },
   actionButtonText: {
     color: '#FFFFFF',
@@ -1099,17 +1167,31 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   secondaryButton: {
-    minHeight: 48,
-    borderRadius: 16,
+    minHeight: 44,
+    borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.74)',
     borderWidth: 1,
     borderColor: 'rgba(122,85,176,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    minWidth: 112,
+    paddingHorizontal: 14,
+    minWidth: 96,
     flexDirection: 'row',
-    gap: 6,
+    gap: 4,
+  },
+  backButtonWrapper: {
+    marginBottom: 6,
+    alignItems: 'flex-start',
+  },
+  minimalBackButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(122,85,176,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.85)',
   },
   secondaryButtonText: {
     color: '#6B5B8A',
@@ -1121,7 +1203,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   smallActionCard: {
-    paddingVertical: 16,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   smallActionText: {
@@ -1137,5 +1219,8 @@ const styles = StyleSheet.create({
   },
   purpleCard: {
     backgroundColor: '#DDD0FF',
+  },
+  greenCard: {
+    backgroundColor: '#D7F5DF',
   },
 });

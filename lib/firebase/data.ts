@@ -16,6 +16,8 @@ import type {
   CompleteOnboardingInput,
   CreateStudyBlockInput,
   CreateTaskInput,
+  GroupStudySlot,
+  LmsConnectionInput,
   LmsFeedItem,
   ScheduleItem,
   TaskItem,
@@ -208,6 +210,26 @@ export async function createTaskAndSchedule(uid: string, input: CreateTaskInput)
 export async function refreshLmsFeed(uid: string) {
   ensureMatchingUser(uid);
   await backend.syncLmsFeed();
+}
+
+export async function connectLms(uid: string, credentials: LmsConnectionInput) {
+  ensureMatchingUser(uid);
+  await backend.connectLms(credentials);
+}
+
+export async function syncOpenLmsFeed(uid: string) {
+  ensureMatchingUser(uid);
+  await backend.syncOpenLmsFeed();
+}
+
+export async function resetLmsDemo(uid: string) {
+  ensureMatchingUser(uid);
+  await backend.resetLmsDemo();
+}
+
+export async function fetchGroupStudySlots(uid: string): Promise<GroupStudySlot[]> {
+  ensureMatchingUser(uid);
+  return backend.suggestGroupStudySlots();
 }
 
 export async function updateTaskStatus(uid: string, taskId: string, status: TaskItem['status']) {

@@ -118,6 +118,12 @@ function sessionLogsCollectionPath(uid: string) {
   return `users/${uid}/sessionLogs`;
 }
 
+export type OpenLmsConfig = {
+  url: string;
+  token: string;
+  lastConnectedAt: string;
+};
+
 // ======================================================
 // 2) CORE TYPES
 // ======================================================
@@ -417,6 +423,19 @@ export type FreeWindow = {
   minutes: number;
 };
 
+export type GroupStudySlot = {
+  id: string;
+  partnerName: string;
+  subject: string;
+  topic: string;
+  startsAt: string;
+  endsAt: string;
+  location: string;
+  mutualMinutes: number;
+  mode: 'online' | 'onsite';
+  description?: string;
+};
+
 export type ScheduleDraft = {
   title: string;
   type: 'study';
@@ -492,6 +511,12 @@ function endOfDay(date: Date) {
 
 function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60_000);
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
 }
 
 function diffMinutes(a: Date, b: Date) {
@@ -1160,8 +1185,117 @@ export class SchedULearnBackend {
     });
   }
 
+  async connectLms({ url, username, password }: { url: string; username: string; password: string }) {
+    const uid = this.requireUid();
+    const cleanUrl = url.trim().replace(/\/$/, '');
+    if (!cleanUrl) {
+      throw new Error('Enter a valid LMS URL.');
+    }
+    if (!username.trim() || password.length === 0) {
+      throw new Error('Provide both username and password to connect LMS.');
+    }
+
+    const response = await fetch(`${cleanUrl}/login/token.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&service=moodle_mobile_app`,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error_description ?? data.error ?? 'Unable to connect to LMS.');
+    }
+
+    const token = data.token;
+    if (!token) {
+      throw new Error('No LMS token received. Please check your credentials.');
+    }
+
+    await setDoc(
+      doc(this.firestore, userDocPath(uid)),
+      {
+        lms: {
+          url: cleanUrl,
+          token,
+          lastConnectedAt: nowIso(),
+        },
+      },
+      { merge: true }
+    );
+  }
+
+  async getStoredLmsConfig() {
+    const uid = this.requireUid();
+    const ref = doc(this.firestore, userDocPath(uid));
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+
+    const data = snap.data() as UserProfile & { lms?: OpenLmsConfig };
+    if (!data.lms?.url || !data.lms?.token) return null;
+    return data.lms;
+  }
+
   async syncLmsFeed() {
-    await this.refreshMockLmsFeed();
+    const config = await this.getStoredLmsConfig();
+    if (!config) {
+      await this.refreshMockLmsFeed();
+      return;
+    }
+
+    await this.syncOpenLmsFeed(config);
+  }
+
+  async syncOpenLmsFeed(config?: OpenLmsConfig) {
+    const connection = config ?? (await this.getStoredLmsConfig());
+    if (!connection) {
+      throw new Error('LMS not connected. Please connect your LMS account first.');
+    }
+
+    const endpoint = `${connection.url}/webservice/rest/server.php?wstoken=${connection.token}&wsfunction=mod_assign_get_assignments&moodlewsrestformat=json`;
+
+    const response = await fetch(endpoint);
+    if (!response.ok) {
+      throw new Error('Unable to reach LMS. Please check your connection.');
+    }
+
+    const data = await response.json();
+    if (data.exception) {
+      throw new Error(data.message ?? 'LMS token expired or access denied.');
+    }
+
+    const lessons = Array.isArray(data.courses) ? data.courses : [];
+    const items = [] as Parameters<typeof this.ingestLmsFeedItems>[0];
+
+    for (const course of lessons) {
+      const courseName = course.fullname ?? course.shortname ?? 'OpenLMS Course';
+      const assignments = Array.isArray(course.assignments) ? course.assignments : [];
+
+      for (const assignment of assignments) {
+        if (!assignment.duedate) continue;
+        const dueDate = new Date(assignment.duedate * 1000);
+        if (Number.isNaN(dueDate.getTime())) continue;
+
+        items.push({
+          provider: 'openlms',
+          source: 'OpenLMS',
+          externalKey: `${course.id ?? 'course'}:${assignment.id}`,
+          externalCourseId: course.id !== undefined ? String(course.id) : null,
+          externalItemId: assignment.id !== undefined ? String(assignment.id) : null,
+          externalUrl: assignment.url ?? null,
+          title: assignment.name ?? 'OpenLMS Item',
+          course: courseName,
+          type: detectLmsTaskType(assignment.name ?? '', assignment.modname ?? ''),
+          detectedDueAt: dueDate.toISOString(),
+          status: 'new',
+          linkedTaskId: null,
+          rawPayload: JSON.stringify(assignment),
+          syncError: null,
+        });
+      }
+    }
+
+    await this.ingestLmsFeedItems(items);
   }
 
   async refreshMockLmsFeed() {
@@ -1225,10 +1359,71 @@ export class SchedULearnBackend {
         rawPayload: '',
         syncError: null,
       },
+      {
+        provider: 'mock',
+        source: 'Mock LMS',
+        externalKey: 'mock:chemistry:final-exam',
+        externalCourseId: 'chemistry',
+        externalItemId: 'final-exam',
+        externalUrl: null,
+        title: 'Chemistry Final Exam',
+        course: 'General Chemistry',
+        type: 'exam',
+        detectedDueAt: addMinutes(now, 60 * 72).toISOString(),
+        status: 'updated',
+        linkedTaskId: null,
+        rawPayload: '',
+        syncError: null,
+      },
     ];
 
     await this.ingestLmsFeedItems(samples);
   }
+
+  async resetLmsDemo() {
+    const uid = this.requireUid();
+    const batch = writeBatch(this.firestore);
+
+    const feedQuery = query(
+      collection(this.firestore, lmsFeedCollectionPath(uid)),
+      where('source', '==', 'Mock LMS')
+    );
+    const feedSnap = await getDocs(feedQuery);
+    feedSnap.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+
+    const taskQuery = query(
+      collection(this.firestore, tasksCollectionPath(uid)),
+      where('source', '==', 'lms')
+    );
+    const taskSnap = await getDocs(taskQuery);
+
+    const mockTaskIds: string[] = [];
+    taskSnap.docs.forEach((taskDoc) => {
+      const task = taskDoc.data() as TaskItem;
+      const key = task.sourceMeta?.externalKey ?? '';
+      const isMockTask = key.startsWith('mock:') || taskDoc.id.startsWith('mock-task-');
+      if (isMockTask) {
+        mockTaskIds.push(taskDoc.id);
+        batch.delete(taskDoc.ref);
+      }
+    });
+
+    if (mockTaskIds.length) {
+      const chunkSize = 10;
+      for (let start = 0; start < mockTaskIds.length; start += chunkSize) {
+        const chunk = mockTaskIds.slice(start, start + chunkSize);
+        const scheduleQuery = query(
+          collection(this.firestore, schedulesCollectionPath(uid)),
+          where('taskId', 'in', chunk)
+        );
+        const schedSnap = await getDocs(scheduleQuery);
+        schedSnap.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+      }
+    }
+
+    await batch.commit();
+  }
+
   // --------------------------------------------------
   // EAF UPLOAD + CLASS IMPORT
   // --------------------------------------------------
@@ -1471,6 +1666,51 @@ export class SchedULearnBackend {
     await this.updateTask(taskId, { scheduledMinutes: 0 });
     return this.autoScheduleTask(taskId);
   }
+
+  async suggestGroupStudySlots() {
+    const now = new Date();
+    const horizon = addDays(now, 3);
+    const schedules = await this.getSchedulesUntil(horizon.toISOString());
+    const preferences = await this.getPreferencesSafe();
+    const userWindows = findFreeWindows(schedules, preferences, now, horizon);
+
+    if (!userWindows.length) {
+      return [];
+    }
+
+    const matches: GroupStudySlot[] = [];
+    const classmates = getClassmateAvailability(now);
+
+    for (const mate of classmates) {
+      if (matches.length >= 3) break;
+      for (const mateWindow of mate.windows) {
+        const overlaps = userWindows
+          .map((window) => intersectWindows(window, mateWindow))
+          .filter(Boolean) as FreeWindow[];
+
+        if (!overlaps.length) continue;
+
+        const best = overlaps.sort((a, b) => b.minutes - a.minutes)[0];
+        if (best.minutes < 45) continue;
+
+        matches.push({
+          id: `${mate.partnerName}-${best.startsAt.toISOString()}`,
+          partnerName: mate.partnerName,
+          subject: mate.subject,
+          topic: mate.topic,
+          location: mate.location,
+          mode: mate.mode,
+          startsAt: best.startsAt.toISOString(),
+          endsAt: best.endsAt.toISOString(),
+          mutualMinutes: best.minutes,
+          description: mate.description,
+        });
+        break;
+      }
+    }
+
+    return matches;
+  }
 }
 
 // ======================================================
@@ -1643,6 +1883,75 @@ export function findFreeWindows(
   }
 
   return freeWindows;
+}
+
+function intersectWindows(a: FreeWindow, b: FreeWindow): FreeWindow | null {
+  const start = a.startsAt > b.startsAt ? a.startsAt : b.startsAt;
+  const end = a.endsAt < b.endsAt ? a.endsAt : b.endsAt;
+  if (end <= start) return null;
+  const minutes = diffMinutes(start, end);
+  return minutes > 0 ? { startsAt: start, endsAt: end, minutes } : null;
+}
+
+function buildClassmateWindow(base: Date, dayOffset: number, hour: number, minute: number, duration: number): FreeWindow {
+  const start = setDayTime(addDays(base, dayOffset), hour, minute);
+  const end = addMinutes(start, duration);
+  return {
+    startsAt: start,
+    endsAt: end,
+    minutes: diffMinutes(start, end),
+  };
+}
+
+function getClassmateAvailability(base: Date) {
+  const anchor = startOfDay(base);
+  return [
+    {
+      partnerName: 'Rhea Cruz',
+      subject: 'Applied Physics',
+      topic: 'Expert Systems Lab review',
+      location: 'Library Studio 2',
+      mode: 'onsite',
+      description: 'Sketch the final expert system demo and discuss project roles.',
+      windows: [
+        buildClassmateWindow(anchor, 1, 14, 30, 120),
+        buildClassmateWindow(anchor, 2, 9, 0, 90),
+      ],
+    },
+    {
+      partnerName: 'Nathan Dela Vega',
+      subject: 'Statistics II',
+      topic: 'Monte Carlo study group',
+      location: 'Zoom',
+      mode: 'online',
+      description: 'Review formulas and prep the Monte Carlo presentation.',
+      windows: [
+        buildClassmateWindow(anchor, 0, 19, 0, 100),
+        buildClassmateWindow(anchor, 2, 16, 0, 75),
+      ],
+    },
+    {
+      partnerName: 'Maya Torres',
+      subject: 'Data Structures',
+      topic: 'Lab debugging session',
+      location: 'Campus Coffee Lab',
+      mode: 'onsite',
+      description: 'Pair program through the linked list project bugs.',
+      windows: [
+        buildClassmateWindow(anchor, 1, 10, 0, 90),
+        buildClassmateWindow(anchor, 3, 13, 30, 60),
+      ],
+    },
+  ];
+}
+
+function detectLmsTaskType(name: string, modname: string): TaskType {
+  const title = (name ?? '').toLowerCase();
+  const module = (modname ?? '').toLowerCase();
+  if (module.includes('quiz') || title.includes('quiz')) return 'quiz';
+  if (module.includes('exam') || title.includes('exam') || title.includes('final') || title.includes('midterm')) return 'exam';
+  if (title.includes('project')) return 'project';
+  return 'assignment';
 }
 
 /**
@@ -1893,11 +2202,15 @@ export type FirebaseBackendShape = {
   regenerateFutureStudyPlanForTask: (taskId: string) => Promise<ScheduleDraft[]>;
 
   // LMS
+  connectLms: (credentials: { url: string; username: string; password: string }) => Promise<void>;
   syncLmsFeed: () => Promise<void>;
+  syncOpenLmsFeed: () => Promise<void>;
   refreshMockLmsFeed: () => Promise<void>; // temp compatibility alias
+  resetLmsDemo: () => Promise<void>;
   createTaskFromLmsFeed: (feedId: string) => Promise<TaskItem>;
   markLmsFeedItemReviewed: (feedId: string) => Promise<void>;
   dismissLmsFeedItem: (feedId: string) => Promise<void>;
+  suggestGroupStudySlots: () => Promise<GroupStudySlot[]>;
 
   // profile / onboarding
   updateProfile: (patch: Partial<UserProfile>) => Promise<void>;

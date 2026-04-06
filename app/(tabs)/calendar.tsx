@@ -1,34 +1,36 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import {
-  PanResponder,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ClayCard, ClayPill, ClayScreen, ClaySectionHeader } from '@/components/clay-ui';
 import { ThemedText } from '@/components/themed-text';
 import type { ScheduleItem } from '@/lib/firebase/types';
 import { useFirebaseBackend } from '@/providers/firebase-provider';
+import { planAutoSchedule } from '@/lib/scheduler/algorithm';
 
-const HOUR_HEIGHT = 72;
-const MIN_BLOCK_MINUTES = 30;
-const SNAP_MINUTES = 15;
-const DEFAULT_DAY_START = 7;
-const DEFAULT_DAY_END = 22;
-
-type DayScheduleItem = ScheduleItem & {
-  lane: number;
-  laneCount: number;
-};
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function startOfDay(date: Date) {
   const next = new Date(date);
   next.setHours(0, 0, 0, 0);
   return next;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function shiftMonth(date: Date, delta: number) {
+  const next = new Date(date);
+  const desiredDay = next.getDate();
+  next.setDate(1);
+  next.setMonth(next.getMonth() + delta);
+  const daysInMonth = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(desiredDay, daysInMonth));
+  return startOfDay(next);
 }
 
 function isSameDay(a: Date, b: Date) {
@@ -39,68 +41,23 @@ function isSameDay(a: Date, b: Date) {
   );
 }
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+function isSameMonth(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
-function getWeekStart(date: Date) {
-  const next = startOfDay(date);
-  next.setDate(next.getDate() - next.getDay());
-  return next;
+function getMonthGridDays(anchor: Date) {
+  const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const startOffset = monthStart.getDay();
+  const gridStart = addDays(monthStart, -startOffset);
+
+  return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
 }
 
-function getWeekDays(anchor: Date) {
-  const weekStart = getWeekStart(anchor);
-  return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
-}
-
-function formatWeekRange(anchor: Date) {
-  const weekStart = getWeekStart(anchor);
-  const weekEnd = addDays(weekStart, 6);
-
-  const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
-  const sameYear = weekStart.getFullYear() === weekEnd.getFullYear();
-
-  if (sameMonth && sameYear) {
-    return `${weekStart.toLocaleDateString([], {
-      month: 'long',
-    })} ${weekStart.getDate()}–${weekEnd.getDate()}, ${weekStart.getFullYear()}`;
-  }
-
-  if (sameYear) {
-    return `${weekStart.toLocaleDateString([], {
-      month: 'short',
-      day: 'numeric',
-    })} – ${weekEnd.toLocaleDateString([], {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })}`;
-  }
-
-  return `${weekStart.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })} – ${weekEnd.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })}`;
-}
-
-function formatDayLabel(date: Date) {
+function formatMonthTitle(date: Date) {
   return date.toLocaleDateString([], {
-    weekday: 'short',
+    month: 'long',
+    year: 'numeric',
   });
-}
-
-function formatTimeLabel(hour: number) {
-  const normalized = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-  const meridiem = hour >= 12 ? 'PM' : 'AM';
-  return `${normalized} ${meridiem}`;
 }
 
 function formatEventTimeRange(startsAt: string, endsAt: string) {
@@ -114,42 +71,6 @@ function formatEventTimeRange(startsAt: string, endsAt: string) {
     hour: 'numeric',
     minute: '2-digit',
   })}`;
-}
-
-function diffMinutes(start: Date, end: Date) {
-  return Math.round((end.getTime() - start.getTime()) / 60000);
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function snapToStep(minutes: number, step = SNAP_MINUTES) {
-  return Math.round(minutes / step) * step;
-}
-
-function getStartHour(preferences?: { startHour?: number } | null) {
-  return preferences?.startHour ?? DEFAULT_DAY_START;
-}
-
-function getEndHour(preferences?: { endHour?: number } | null) {
-  return preferences?.endHour ?? DEFAULT_DAY_END;
-}
-
-function getMinutesFromDayStart(date: Date, startHour: number) {
-  return (date.getHours() - startHour) * 60 + date.getMinutes();
-}
-
-function minutesToPixels(minutes: number) {
-  return (minutes / 60) * HOUR_HEIGHT;
-}
-
-function pixelsToMinutes(px: number) {
-  return (px / HOUR_HEIGHT) * 60;
-}
-
-function overlaps(startA: number, endA: number, startB: number, endB: number) {
-  return startA < endB && endA > startB;
 }
 
 function getUrgencyPalette(urgency?: string, status?: string) {
@@ -188,196 +109,63 @@ function getUrgencyPalette(urgency?: string, status?: string) {
   };
 }
 
-function getProductivityZoneColor(hour: number) {
-  if (hour >= 9 && hour < 12) {
-    return 'rgba(54, 199, 128, 0.08)';
-  }
-
-  if (hour >= 13 && hour < 17) {
-    return 'rgba(242, 185, 59, 0.08)';
-  }
-
-  return 'rgba(125, 114, 147, 0.04)';
-}
-
-function getTimelineHours(startHour: number, endHour: number) {
-  return Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index);
-}
-
-function assignLanes(items: ScheduleItem[]): DayScheduleItem[] {
-  const sorted = [...items].sort((a, b) => {
-    return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
-  });
-
-  const result: DayScheduleItem[] = [];
-  const active: { end: number; lane: number; group: number }[] = [];
-  const groups = new Map<number, number>();
-  let groupIdCounter = 0;
-
-  for (const item of sorted) {
-    const start = new Date(item.startsAt).getTime();
-    const end = new Date(item.endsAt).getTime();
-
-    for (let i = active.length - 1; i >= 0; i -= 1) {
-      if (active[i].end <= start) {
-        active.splice(i, 1);
-      }
-    }
-
-    const usedLanes = new Set(active.map((entry) => entry.lane));
-    let lane = 0;
-    while (usedLanes.has(lane)) {
-      lane += 1;
-    }
-
-    const overlappingGroups = active.map((entry) => entry.group);
-    const group =
-      overlappingGroups.length > 0 ? Math.min(...overlappingGroups) : groupIdCounter++;
-
-    active.push({ end, lane, group });
-
-    const currentGroupCount = groups.get(group) ?? 0;
-    groups.set(group, Math.max(currentGroupCount, active.length));
-
-    result.push({
-      ...item,
-      lane,
-      laneCount: 1,
-    });
-  }
-
-  return result.map((item) => {
-    const start = new Date(item.startsAt).getTime();
-    const end = new Date(item.endsAt).getTime();
-
-    const related = sorted.filter((candidate) => {
-      const candidateStart = new Date(candidate.startsAt).getTime();
-      const candidateEnd = new Date(candidate.endsAt).getTime();
-      return overlaps(start, end, candidateStart, candidateEnd);
-    });
-
-    return {
-      ...item,
-      laneCount: Math.max(1, related.length),
-    };
-  });
-}
-
-function findNearestFreeStart(
-  items: ScheduleItem[],
-  eventId: string,
-  proposedStartMinutes: number,
-  durationMinutes: number,
-  dayStartHour: number,
-  dayEndHour: number
-) {
-  const dayMin = 0;
-  const dayMax = (dayEndHour - dayStartHour) * 60;
-
-  const otherItems = items
-    .filter((item) => item.id !== eventId && item.status !== 'cancelled')
-    .map((item) => ({
-      start: getMinutesFromDayStart(new Date(item.startsAt), dayStartHour),
-      end: getMinutesFromDayStart(new Date(item.endsAt), dayStartHour),
-    }))
-    .sort((a, b) => a.start - b.start);
-
-  let candidate = clamp(
-    snapToStep(proposedStartMinutes),
-    dayMin,
-    Math.max(dayMin, dayMax - durationMinutes)
-  );
-
-  for (const item of otherItems) {
-    if (overlaps(candidate, candidate + durationMinutes, item.start, item.end)) {
-      candidate = snapToStep(item.end);
-    }
-  }
-
-  candidate = clamp(candidate, dayMin, Math.max(dayMin, dayMax - durationMinutes));
-
-  for (const item of otherItems) {
-    if (overlaps(candidate, candidate + durationMinutes, item.start, item.end)) {
-      const beforeCandidate = item.start - durationMinutes;
-      const clampedBefore = clamp(beforeCandidate, dayMin, Math.max(dayMin, dayMax - durationMinutes));
-
-      const beforeFits = !otherItems.some((other) =>
-        overlaps(clampedBefore, clampedBefore + durationMinutes, other.start, other.end)
-      );
-
-      if (beforeFits) {
-        return snapToStep(clampedBefore);
-      }
-    }
-  }
-
-  return candidate;
-}
-
-function resolveResizeWithConflicts(
-  items: ScheduleItem[],
-  eventId: string,
-  startMinutes: number,
-  proposedDurationMinutes: number,
-  dayEndHour: number,
-  dayStartHour: number
-) {
-  const dayMax = (dayEndHour - dayStartHour) * 60;
-  const otherItems = items
-    .filter((item) => item.id !== eventId && item.status !== 'cancelled')
-    .map((item) => ({
-      start: getMinutesFromDayStart(new Date(item.startsAt), dayStartHour),
-      end: getMinutesFromDayStart(new Date(item.endsAt), dayStartHour),
-    }))
-    .sort((a, b) => a.start - b.start);
-
-  let maxAllowedEnd = dayMax;
-
-  for (const item of otherItems) {
-    if (item.start >= startMinutes) {
-      maxAllowedEnd = item.start;
-      break;
-    }
-  }
-
-  const maxDuration = Math.max(MIN_BLOCK_MINUTES, maxAllowedEnd - startMinutes);
-  return clamp(
-    snapToStep(proposedDurationMinutes),
-    MIN_BLOCK_MINUTES,
-    Math.max(MIN_BLOCK_MINUTES, maxDuration)
-  );
-}
-
-function buildDateWithMinutes(baseDate: Date, startHour: number, minutesFromDayStart: number) {
-  const next = startOfDay(baseDate);
-  next.setHours(startHour, 0, 0, 0);
-  next.setMinutes(next.getMinutes() + minutesFromDayStart);
-  return next;
+function getDayKey(date: Date) {
+  return startOfDay(date).getTime();
 }
 
 export default function CalendarScreen() {
   const router = useRouter();
-  const { profile, preferences, refreshMockLmsFeed, rescheduleItem, schedules, user } = useFirebaseBackend();
-
+  const { profile, refreshMockLmsFeed, schedules, tasks, preferences, user } =
+    useFirebaseBackend();
   const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()));
 
-  const dayStartHour = getStartHour(preferences);
-  const dayEndHour = getEndHour(preferences);
-  const totalDayMinutes = (dayEndHour - dayStartHour) * 60;
-  const timelineHeight = minutesToPixels(totalDayMinutes);
-  const hours = getTimelineHours(dayStartHour, dayEndHour);
-  const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
+  const monthDays = useMemo(() => getMonthGridDays(selectedDate), [selectedDate]);
+  const now = useMemo(() => new Date(), []);
+  const autoPlan = useMemo(
+    () =>
+      planAutoSchedule({
+        tasks,
+        schedules,
+        preferences,
+        now,
+      }),
+    [tasks, schedules, preferences, now]
+  );
+
+  const selectedDayAutoSessions = useMemo(
+    () => autoPlan.sessions.filter((session) => isSameDay(session.startsAt, selectedDate)),
+    [autoPlan.sessions, selectedDate]
+  );
+
+  const eventsByDay = useMemo(() => {
+    const grouped = new Map<number, ScheduleItem[]>();
+
+    for (const item of schedules) {
+      const key = getDayKey(new Date(item.startsAt));
+      const group = grouped.get(key) ?? [];
+      group.push(item);
+      grouped.set(key, group);
+    }
+
+    grouped.forEach((items) => {
+      items.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    });
+
+    return grouped;
+  }, [schedules]);
 
   const selectedDaySchedules = useMemo(() => {
-    const filtered = schedules.filter((item) => isSameDay(new Date(item.startsAt), selectedDate));
-    return assignLanes(filtered);
-  }, [schedules, selectedDate]);
+    const key = getDayKey(selectedDate);
+    return eventsByDay.get(key) ?? [];
+  }, [eventsByDay, selectedDate]);
 
-  const upcomingForDay = useMemo(() => {
-    return [...selectedDaySchedules].sort((a, b) => {
-      return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
-    });
-  }, [selectedDaySchedules]);
+  const upcomingForDay = useMemo(
+    () =>
+      [...selectedDaySchedules].sort(
+        (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+      ),
+    [selectedDaySchedules]
+  );
 
   const urgentCount = selectedDaySchedules.filter((item) => item.urgency === 'red').length;
 
@@ -385,7 +173,6 @@ export default function CalendarScreen() {
     <ClayScreen
       greeting="Calendar"
       title="Smart Day Timeline"
-      subtitle="Drag, resize, and let the planner snap blocks into the best free slot."
       avatarLabel={profile?.avatarInitials ?? 'SL'}
       onAvatarPress={() => router.push('/profile')}
       onRefresh={async () => {
@@ -394,49 +181,23 @@ export default function CalendarScreen() {
         }
       }}>
       <View style={styles.topRow}>
-        <ClayCard style={styles.weekHeaderCard}>
-          <View style={styles.weekHeaderTop}>
+        <ClayCard style={styles.monthHeaderCard}>
+          <View style={styles.monthHeaderTop}>
             <Pressable
-              onPress={() => setSelectedDate((current) => addDays(current, -7))}
+              onPress={() => setSelectedDate((current) => shiftMonth(current, -1))}
               style={styles.navButton}>
-              <MaterialIcons name="chevron-left" size={18} color="#6B5B8A" />
+              <MaterialIcons name="chevron-left" size={20} color="#6B5B8A" />
             </Pressable>
 
-            <View style={styles.weekHeaderCenter}>
-              <ThemedText style={styles.weekTitle}>{formatWeekRange(selectedDate)}</ThemedText>
-              <ThemedText style={styles.weekSubtitle}>Week view</ThemedText>
+            <View style={styles.monthHeaderCenter}>
+              <ThemedText style={styles.monthTitle}>{formatMonthTitle(selectedDate)}</ThemedText>
             </View>
 
             <Pressable
-              onPress={() => setSelectedDate((current) => addDays(current, 7))}
+              onPress={() => setSelectedDate((current) => shiftMonth(current, 1))}
               style={styles.navButton}>
-              <MaterialIcons name="chevron-right" size={18} color="#6B5B8A" />
+              <MaterialIcons name="chevron-right" size={20} color="#6B5B8A" />
             </Pressable>
-          </View>
-
-          <View style={styles.weekStrip}>
-            {weekDays.map((day) => {
-              const active = isSameDay(day, selectedDate);
-              const isToday = isSameDay(day, new Date());
-
-              return (
-                <Pressable
-                  key={day.toISOString()}
-                  onPress={() => setSelectedDate(startOfDay(day))}
-                  style={[
-                    styles.weekDayPill,
-                    active && styles.weekDayPillActive,
-                    isToday && !active && styles.weekDayPillToday,
-                  ]}>
-                  <ThemedText style={[styles.weekDayName, active && styles.weekDayNameActive]}>
-                    {formatDayLabel(day)}
-                  </ThemedText>
-                  <ThemedText style={[styles.weekDayNumber, active && styles.weekDayNumberActive]}>
-                    {day.getDate()}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
           </View>
         </ClayCard>
 
@@ -460,93 +221,120 @@ export default function CalendarScreen() {
         </View>
       </View>
 
-      <ClaySectionHeader
-        icon="schedule"
-        title={selectedDate.toLocaleDateString([], {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-        })}
-        accessory={
-          <ClayPill>
-            <ThemedText style={styles.accessoryText}>
-              {selectedDaySchedules.length} blocks • {urgentCount} urgent
-            </ThemedText>
-          </ClayPill>
-        }
-      />
-
-      <ClayCard style={styles.zoneLegendCard}>
-        <View style={styles.zoneLegendRow}>
-          <View style={styles.zoneLegendItem}>
-            <View style={[styles.zoneSwatch, { backgroundColor: 'rgba(54, 199, 128, 0.14)' }]} />
-            <ThemedText style={styles.zoneLegendText}>Peak focus</ThemedText>
-          </View>
-          <View style={styles.zoneLegendItem}>
-            <View style={[styles.zoneSwatch, { backgroundColor: 'rgba(242, 185, 59, 0.14)' }]} />
-            <ThemedText style={styles.zoneLegendText}>Good energy</ThemedText>
-          </View>
-          <View style={styles.zoneLegendItem}>
-            <View style={[styles.zoneSwatch, { backgroundColor: 'rgba(125, 114, 147, 0.08)' }]} />
-            <ThemedText style={styles.zoneLegendText}>Low energy</ThemedText>
-          </View>
-        </View>
-      </ClayCard>
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <ClayCard style={styles.timelineCard}>
-          <View style={[styles.timelineContainer, { height: timelineHeight + 24 }]}>
-            <View style={styles.timeColumn}>
-              {hours.map((hour, index) => (
-                <View
-                  key={hour}
-                  style={[
-                    styles.hourCell,
-                    {
-                      top: index * HOUR_HEIGHT,
-                      height: HOUR_HEIGHT,
-                    },
-                  ]}>
-                  <ThemedText style={styles.hourText}>{formatTimeLabel(hour)}</ThemedText>
-                </View>
-              ))}
-            </View>
+        <ClayCard style={styles.monthCard}>
+          <View style={styles.weekdayRow}>
+            {WEEKDAY_LABELS.map((label) => (
+              <ThemedText key={label} style={styles.weekdayLabel}>
+                {label}
+              </ThemedText>
+            ))}
+          </View>
 
-            <View style={styles.timelineColumn}>
-              {hours.slice(0, -1).map((hour, index) => (
-                <View
-                  key={hour}
-                  style={[
-                    styles.hourBand,
-                    {
-                      top: index * HOUR_HEIGHT,
-                      height: HOUR_HEIGHT,
-                      backgroundColor: getProductivityZoneColor(hour),
-                    },
-                  ]}>
-                  <View style={styles.hourLine} />
-                </View>
-              ))}
+          <View style={styles.monthGrid}>
+            {monthDays.map((day) => {
+              const dayKey = getDayKey(day);
+              const dayEvents = eventsByDay.get(dayKey) ?? [];
+              const isCurrentMonth = isSameMonth(day, selectedDate);
+              const isSelected = isSameDay(day, selectedDate);
+              const isToday = isSameDay(day, now);
 
-              {selectedDaySchedules.map((item) => (
-                <TimelineEventBlock
-                  key={item.id}
-                  item={item}
-                  allItems={selectedDaySchedules}
-                  selectedDate={selectedDate}
-                  dayStartHour={dayStartHour}
-                  dayEndHour={dayEndHour}
-                  onCommit={async (startsAt, endsAt) => {
-                    await rescheduleItem(item.id, startsAt, endsAt);
-                  }}
-                />
-              ))}
-            </View>
+              return (
+                <Pressable
+                  key={day.toISOString()}
+                  onPress={() => setSelectedDate(startOfDay(day))}
+                  style={[
+                    styles.dayCell,
+                    !isCurrentMonth && styles.dayCellFaded,
+                    isSelected && styles.dayCellSelected,
+                  ]}>
+                  <View
+                    style={[
+                      styles.dayNumberContainer,
+                      isToday && !isSelected && styles.dayNumberToday,
+                    ]}>
+                    <ThemedText
+                      style={[
+                        styles.dayNumber,
+                        isSelected && styles.dayNumberSelected,
+                        !isCurrentMonth && styles.dayNumberInactive,
+                      ]}>
+                      {day.getDate()}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.dayEvents}>
+                    {dayEvents.slice(0, 3).map((item) => {
+                      const palette = getUrgencyPalette(item.urgency, item.status);
+                      return (
+                        <View
+                          key={item.id}
+                          style={[styles.dayEventStripe, { backgroundColor: palette.border }]}
+                        />
+                      );
+                    })}
+                    {dayEvents.length > 3 && (
+                      <ThemedText style={styles.moreLabel}>+{dayEvents.length - 3}</ThemedText>
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         </ClayCard>
+
+        <ClaySectionHeader icon="auto-awesome" title="Auto-schedule preview" />
+        <ClayCard style={styles.autoPlanCard}>
+          {selectedDayAutoSessions.length ? (
+            <>
+              {selectedDayAutoSessions.map((session) => {
+                const palette = getUrgencyPalette(session.urgency, 'scheduled');
+
+                return (
+                  <View
+                    key={`${session.taskId}-${session.startsAt.toISOString()}`}
+                    style={styles.autoPlanRow}>
+                    <View style={[styles.autoPlanDot, { backgroundColor: palette.border }]} />
+                    <View style={styles.autoPlanCopy}>
+                      <ThemedText style={styles.autoPlanTitle}>{session.title}</ThemedText>
+                      <ThemedText style={styles.autoPlanSubtitle}>
+                        {formatEventTimeRange(session.startsAt.toISOString(), session.endsAt.toISOString())} •{' '}
+                        {session.bufferAfterMinutes} min buffer
+                      </ThemedText>
+                    </View>
+                  </View>
+                );
+              })}
+              <ThemedText style={styles.autoPlanSummary}>
+                {selectedDayAutoSessions.length} block
+                {selectedDayAutoSessions.length === 1 ? '' : 's'} auto-scheduled.
+              </ThemedText>
+            </>
+          ) : (
+            <ThemedText style={styles.autoPlanEmpty}>
+              No auto-schedule suggestions for this day yet. Smart Scheduler will surface ideas once it spots open windows.
+            </ThemedText>
+          )}
+        </ClayCard>
+
+        <ClaySectionHeader
+          icon="schedule"
+          title={selectedDate.toLocaleDateString([], {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+          })}
+          accessory={
+            <ClayPill>
+              <ThemedText style={styles.accessoryText}>
+                {selectedDaySchedules.length} blocks • {urgentCount} urgent
+              </ThemedText>
+            </ClayPill>
+          }
+        />
 
         <ClaySectionHeader icon="view-agenda" title="Agenda" />
 
@@ -596,261 +384,36 @@ export default function CalendarScreen() {
   );
 }
 
-type TimelineEventBlockProps = {
-  item: DayScheduleItem;
-  allItems: DayScheduleItem[];
-  selectedDate: Date;
-  dayStartHour: number;
-  dayEndHour: number;
-  onCommit: (startsAt: string, endsAt: string) => Promise<void>;
-};
-
-function TimelineEventBlock({
-  item,
-  allItems,
-  selectedDate,
-  dayStartHour,
-  dayEndHour,
-  onCommit,
-}: TimelineEventBlockProps) {
-  const startDate = new Date(item.startsAt);
-  const endDate = new Date(item.endsAt);
-
-  const originalStartMinutes = getMinutesFromDayStart(startDate, dayStartHour);
-  const originalDurationMinutes = Math.max(MIN_BLOCK_MINUTES, diffMinutes(startDate, endDate));
-
-  const [draftTop, setDraftTop] = useState<number | null>(null);
-  const [draftHeight, setDraftHeight] = useState<number | null>(null);
-
-  const displayTop =
-    draftTop ?? minutesToPixels(clamp(originalStartMinutes, 0, (dayEndHour - dayStartHour) * 60));
-  const displayHeight =
-    draftHeight ?? minutesToPixels(Math.max(MIN_BLOCK_MINUTES, originalDurationMinutes));
-
-  const palette = getUrgencyPalette(item.urgency, item.status);
-
-  const laneWidthPercent = 100 / item.laneCount;
-  const leftPercent = item.lane * laneWidthPercent;
-
-  const dragResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 4,
-        onPanResponderMove: (_, gestureState) => {
-          const nextMinutes = clamp(
-            snapToStep(originalStartMinutes + pixelsToMinutes(gestureState.dy)),
-            0,
-            Math.max(0, (dayEndHour - dayStartHour) * 60 - originalDurationMinutes)
-          );
-
-          setDraftTop(minutesToPixels(nextMinutes));
-        },
-        onPanResponderRelease: async (_, gestureState) => {
-          const proposedMinutes = originalStartMinutes + pixelsToMinutes(gestureState.dy);
-          const snappedStart = findNearestFreeStart(
-            allItems,
-            item.id,
-            proposedMinutes,
-            originalDurationMinutes,
-            dayStartHour,
-            dayEndHour
-          );
-
-          const newStart = buildDateWithMinutes(selectedDate, dayStartHour, snappedStart);
-          const newEnd = buildDateWithMinutes(
-            selectedDate,
-            dayStartHour,
-            snappedStart + originalDurationMinutes
-          );
-
-          setDraftTop(null);
-          await onCommit(newStart.toISOString(), newEnd.toISOString());
-        },
-        onPanResponderTerminate: () => {
-          setDraftTop(null);
-        },
-      }),
-    [
-      allItems,
-      dayEndHour,
-      dayStartHour,
-      item.id,
-      onCommit,
-      originalDurationMinutes,
-      originalStartMinutes,
-      selectedDate,
-    ]
-  );
-
-  const resizeResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 4,
-        onPanResponderMove: (_, gestureState) => {
-          const nextDuration = clamp(
-            snapToStep(originalDurationMinutes + pixelsToMinutes(gestureState.dy)),
-            MIN_BLOCK_MINUTES,
-            Math.max(MIN_BLOCK_MINUTES, (dayEndHour - dayStartHour) * 60 - originalStartMinutes)
-          );
-
-          setDraftHeight(minutesToPixels(nextDuration));
-        },
-        onPanResponderRelease: async (_, gestureState) => {
-          const proposedDuration = originalDurationMinutes + pixelsToMinutes(gestureState.dy);
-          const snappedDuration = resolveResizeWithConflicts(
-            allItems,
-            item.id,
-            originalStartMinutes,
-            proposedDuration,
-            dayEndHour,
-            dayStartHour
-          );
-
-          const newStart = buildDateWithMinutes(selectedDate, dayStartHour, originalStartMinutes);
-          const newEnd = buildDateWithMinutes(
-            selectedDate,
-            dayStartHour,
-            originalStartMinutes + snappedDuration
-          );
-
-          setDraftHeight(null);
-          await onCommit(newStart.toISOString(), newEnd.toISOString());
-        },
-        onPanResponderTerminate: () => {
-          setDraftHeight(null);
-        },
-      }),
-    [
-      allItems,
-      dayEndHour,
-      dayStartHour,
-      item.id,
-      onCommit,
-      originalDurationMinutes,
-      originalStartMinutes,
-      selectedDate,
-    ]
-  );
-
-  return (
-    <View
-      style={[
-        styles.eventWrap,
-        {
-          top: displayTop,
-          height: displayHeight,
-          left: `${leftPercent}%`,
-          width: `${laneWidthPercent}%`,
-        },
-      ]}>
-      <View
-        {...dragResponder.panHandlers}
-        style={[
-          styles.eventCard,
-          {
-            backgroundColor: palette.bg,
-            borderColor: palette.border,
-          },
-        ]}>
-        <View style={[styles.eventAccent, { backgroundColor: palette.border }]} />
-        <View style={styles.eventContent}>
-          <ThemedText numberOfLines={1} style={[styles.eventTitle, { color: palette.text }]}>
-            {item.title}
-          </ThemedText>
-          <ThemedText numberOfLines={1} style={styles.eventTime}>
-            {formatEventTimeRange(item.startsAt, item.endsAt)}
-          </ThemedText>
-          {displayHeight >= 70 ? (
-            <ThemedText numberOfLines={1} style={styles.eventMeta}>
-              {item.location ?? item.subject ?? 'Scheduled block'}
-            </ThemedText>
-          ) : null}
-        </View>
-
-        <View
-          {...resizeResponder.panHandlers}
-          style={[styles.resizeHandle, { backgroundColor: palette.handle }]}>
-          <MaterialIcons name="drag-handle" size={14} color="#FFFFFF" />
-        </View>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   topRow: {
-    gap: 12,
+    gap: 8,
   },
-  weekHeaderCard: {
-    gap: 12,
+  monthHeaderCard: {
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
-  weekHeaderTop: {
+  monthHeaderTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  weekHeaderCenter: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  weekTitle: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: '#2D2250',
-  },
-  weekSubtitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8D80A6',
-    marginTop: 2,
-  },
   navButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     backgroundColor: '#F5F0FA',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  weekStrip: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  weekDayPill: {
+  monthHeaderCenter: {
     flex: 1,
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
     alignItems: 'center',
-    backgroundColor: '#F8F5FC',
-    borderWidth: 1,
-    borderColor: '#ECE5F5',
   },
-  weekDayPillActive: {
-    backgroundColor: '#E7DDF8',
-    borderColor: '#CDBBEF',
-  },
-  weekDayPillToday: {
-    borderColor: '#7A5AF8',
-  },
-  weekDayName: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#8E84A4',
-  },
-  weekDayNameActive: {
-    color: '#5F4B8B',
-  },
-  weekDayNumber: {
-    marginTop: 2,
+  monthTitle: {
     fontSize: 15,
     fontWeight: '900',
     color: '#2D2250',
-  },
-  weekDayNumberActive: {
-    color: '#4C3A77',
   },
   legendRow: {
     flexDirection: 'row',
@@ -872,135 +435,137 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#6B5B8A',
   },
-  accessoryText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#6B5B8A',
-  },
-  zoneLegendCard: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 10,
-  },
-  zoneLegendRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  zoneLegendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  zoneSwatch: {
-    width: 18,
-    height: 18,
-    borderRadius: 8,
-  },
-  zoneLegendText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#7D7293',
-  },
   scroll: {
     flex: 1,
   },
   scrollContent: {
+    paddingTop: 4,
     paddingBottom: 24,
     gap: 14,
   },
-  timelineCard: {
-    padding: 12,
-  },
-  timelineContainer: {
-    flexDirection: 'row',
-  },
-  timeColumn: {
-    width: 62,
-    position: 'relative',
-  },
-  hourCell: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-  },
-  hourText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#8D80A6',
-  },
-  timelineColumn: {
-    flex: 1,
-    position: 'relative',
-    borderRadius: 20,
+  monthCard: {
+    padding: 8,
+    gap: 6,
+    minHeight: 320,
+    paddingBottom: 14,
+    marginBottom: 12,
     overflow: 'hidden',
-    backgroundColor: '#FBF9FE',
-    borderWidth: 1,
-    borderColor: '#EEE7F7',
   },
-  hourBand: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-  },
-  hourLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    height: 1,
-    backgroundColor: '#E8E0F4',
-  },
-  eventWrap: {
-    position: 'absolute',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  eventCard: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
+  weekdayRow: {
     flexDirection: 'row',
-    shadowColor: '#7158A6',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    justifyContent: 'space-between',
+    paddingHorizontal: 6,
   },
-  eventAccent: {
-    width: 5,
-  },
-  eventContent: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    paddingRight: 28,
-  },
-  eventTitle: {
+  weekdayLabel: {
     fontSize: 12,
     fontWeight: '900',
+    color: '#8D80A6',
+    width: '14.2%',
+    textAlign: 'center',
   },
-  eventTime: {
-    marginTop: 2,
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 6,
+  },
+  dayCell: {
+    width: '14.28%',
+    minHeight: 72,
+    borderRadius: 20,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: '#FFFFFF',
+  },
+  dayCellFaded: {
+    opacity: 0.55,
+  },
+  dayCellSelected: {
+    borderColor: '#4C3A77',
+    backgroundColor: '#F4F0FB',
+  },
+  dayNumberContainer: {
+    alignSelf: 'flex-start',
+    padding: 4,
+    borderRadius: 999,
+  },
+  dayNumberToday: {
+    borderWidth: 1,
+    borderColor: '#7A5AF8',
+  },
+  dayNumber: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#2D2250',
+  },
+  dayNumberSelected: {
+    color: '#4C3A77',
+  },
+  dayNumberInactive: {
+    color: '#A6A0B7',
+  },
+  dayEvents: {
+    marginTop: 6,
+  },
+  dayEventStripe: {
+    height: 6,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  moreLabel: {
+    marginTop: 4,
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#6B5B8A',
   },
-  eventMeta: {
-    marginTop: 3,
-    fontSize: 10,
-    color: '#8D80A6',
-    fontWeight: '700',
+  autoPlanCard: {
+    borderRadius: 20,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#ECE8F3',
   },
-  resizeHandle: {
-    position: 'absolute',
-    right: 6,
-    bottom: 6,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
+  autoPlanRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  autoPlanDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 4,
+  },
+  autoPlanCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  autoPlanTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#2D2250',
+  },
+  autoPlanSubtitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6B5B8A',
+  },
+  autoPlanSummary: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6B5B8A',
+  },
+  autoPlanEmpty: {
+    fontSize: 12,
+    color: '#6B5B8A',
+    lineHeight: 18,
+  },
+  accessoryText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6B5B8A',
   },
   agendaList: {
     gap: 10,

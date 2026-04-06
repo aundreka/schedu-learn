@@ -92,7 +92,10 @@ async function generateQuizFromPDF(
   }
 
   const data = await response.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
+    candidates?: {
+      content?: { parts?: { text?: string }[] };
+      finishReason?: string;
+    }[];
     error?: { message?: string };
   };
 
@@ -129,7 +132,7 @@ function parseQuestions(raw: string): QuizQuestion[] {
 
   if (!Array.isArray(parsed)) throw new Error('Gemini response was not a JSON array.');
 
-  const questions = (parsed as Array<Record<string, unknown>>)
+  const questions = (parsed as Record<string, unknown>[])
     .filter((item) => {
       const choices = item.choices as Record<string, string> | undefined;
       return (

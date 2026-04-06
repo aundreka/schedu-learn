@@ -45,6 +45,25 @@ export type LmsFeedItem = BackendLmsFeedItem & {
   syncedAt: string;
 };
 
+export type LmsConnectionInput = {
+  url: string;
+  username: string;
+  password: string;
+};
+
+export type GroupStudySlot = {
+  id: string;
+  partnerName: string;
+  subject: string;
+  topic: string;
+  startsAt: string;
+  endsAt: string;
+  location: string;
+  mutualMinutes: number;
+  mode: 'online' | 'onsite';
+  description?: string;
+};
+
 export type CreateTaskInput = BackendCreateTaskInput;
 export type CreateStudyBlockInput = BackendCreateStudyBlockInput;
 

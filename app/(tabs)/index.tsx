@@ -19,6 +19,11 @@ import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ScheduleItem, TaskItem } from '@/lib/firebase/types';
 import { assessTaskUrgency, formatUrgencyLabel } from '@/lib/urgency';
+import {
+  planAutoSchedule,
+  planPanicMode,
+  planRescheduleMissedBlock,
+} from '@/lib/scheduler/algorithm';
 import { useFirebaseBackend } from '@/providers/firebase-provider';
 
 type AlertTone = 'orange' | 'red' | 'blue';
@@ -133,10 +138,6 @@ function urgencyWeight(task: TaskItem) {
   if (urgency.level === 'high') return 3;
   if (urgency.level === 'medium') return 2;
   return 1;
-}
-
-function minutesUntil(iso: string, now: Date) {
-  return Math.floor((new Date(iso).getTime() - now.getTime()) / 60000);
 }
 
 function formatMinutesLabel(minutes: number) {
@@ -398,19 +399,6 @@ function findFallingBehindTask(tasks: TaskItem[], now: Date) {
   );
 }
 
-function findMissedStudyBlock(schedules: ScheduleItem[], now: Date) {
-  return (
-    [...schedules]
-      .filter(
-        (item) =>
-          item.type === 'study' &&
-          item.status === 'scheduled' &&
-          new Date(item.endsAt).getTime() < now.getTime()
-      )
-      .sort((a, b) => new Date(b.endsAt).getTime() - new Date(a.endsAt).getTime())[0] ?? null
-  );
-}
-
 function FlameIcon({
   tone,
   animatedStyle,
@@ -485,7 +473,6 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const backend = useFirebaseBackend() as ReturnType<typeof useFirebaseBackend> & {
-    markScheduleMissed?: (scheduleId: string) => Promise<void>;
     autoScheduleTask?: (taskId: string) => Promise<unknown>;
     preferences?: {
       studyGoalHours?: number;
@@ -497,7 +484,6 @@ export default function HomeScreen() {
     createStudyBlock,
     loadingData,
     lmsFeed,
-    markScheduleMissed,
     profile,
     preferences,
     refreshMockLmsFeed,
@@ -508,7 +494,7 @@ export default function HomeScreen() {
     user,
   } = backend;
 
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
 
   const todaySchedules = useMemo(
     () =>
@@ -534,7 +520,36 @@ export default function HomeScreen() {
   const streakState = useMemo(() => buildStreakState(tasks, now), [tasks, now]);
   const focusTask = useMemo(() => pickFocusTask(openTasks, now), [openTasks, now]);
   const fallingBehindTask = useMemo(() => findFallingBehindTask(openTasks, now), [openTasks, now]);
-  const missedStudyBlock = useMemo(() => findMissedStudyBlock(schedules, now), [schedules, now]);
+  const autoSchedulePlan = useMemo(
+    () =>
+      planAutoSchedule({
+        tasks: openTasks,
+        schedules,
+        preferences,
+        now,
+      }),
+    [openTasks, schedules, preferences, now]
+  );
+  const reschedulePlan = useMemo(
+    () =>
+      planRescheduleMissedBlock({
+        schedules,
+        tasks: openTasks,
+        preferences,
+        now,
+      }),
+    [schedules, openTasks, preferences, now]
+  );
+  const panicPlan = useMemo(
+    () =>
+      planPanicMode({
+        tasks: openTasks,
+        schedules,
+        preferences,
+        now,
+      }),
+    [openTasks, schedules, preferences, now]
+  );
 
   const completedDays = useMemo(
     () =>
@@ -622,45 +637,23 @@ export default function HomeScreen() {
 
   const suggestions: DashboardAlert[] = [];
 
-  if (missedStudyBlock) {
-    const linkedTask = missedStudyBlock.taskId ? taskMap.get(missedStudyBlock.taskId) : null;
-    const label = linkedTask?.title ?? missedStudyBlock.title;
-
+  if (reschedulePlan) {
+    const { missedBlock, suggestedStart, suggestedEnd, durationMinutes, bufferMinutes } = reschedulePlan;
     suggestions.push({
-      id: `missed-${missedStudyBlock.id}`,
-      tone: 'red',
-      icon: 'history-toggle-off',
-      title: `You missed ${label}`,
-      subtitle: nextGap
-        ? `Reschedule it into your next ${formatMinutesLabel(nextGap.minutes)} opening at ${formatTime(
-            nextGap.startsAt.toISOString()
-          )}.`
-        : 'Reschedule it now so your study plan stays intact.',
+      id: `reschedule-${missedBlock.id}`,
+      tone: 'orange',
+      icon: 'schedule',
+      title: `Reschedule ${missedBlock.title}`,
+      subtitle: `${formatEventTimeRange(
+        suggestedStart.toISOString(),
+        suggestedEnd.toISOString()
+      )} • ${formatMinutesLabel(durationMinutes)} + ${bufferMinutes}m buffer`,
       actionLabel: 'Reschedule',
       onPress: async () => {
-        if (markScheduleMissed) {
-          await markScheduleMissed(missedStudyBlock.id);
-          return;
-        }
-
-        if (!nextGap) {
-          throw new Error('No future gap available right now.');
-        }
-
-        const originalMinutes = Math.max(
-          30,
-          Math.floor(
-            (new Date(missedStudyBlock.endsAt).getTime() - new Date(missedStudyBlock.startsAt).getTime()) / 60000
-          )
-        );
-
-        const blockMinutes = Math.min(originalMinutes, nextGap.minutes);
-        const updatedEnd = new Date(nextGap.startsAt.getTime() + blockMinutes * 60000);
-
         await rescheduleItem(
-          missedStudyBlock.id,
-          nextGap.startsAt.toISOString(),
-          updatedEnd.toISOString()
+          missedBlock.id,
+          suggestedStart.toISOString(),
+          suggestedEnd.toISOString()
         );
       },
     });
@@ -742,6 +735,33 @@ export default function HomeScreen() {
         }
 
         throw new Error('No gap found to prioritize this task yet.');
+      },
+    });
+  }
+
+  if (panicPlan) {
+    suggestions.push({
+      id: `panic-${panicPlan.task.id}`,
+      tone: 'red',
+      icon: 'whatshot',
+      title: `Panic plan for ${panicPlan.task.title}`,
+      subtitle: `${panicPlan.segments.length} slot${panicPlan.segments.length === 1 ? '' : 's'} covering ${formatMinutesLabel(
+        panicPlan.totalMinutes
+      )} within ${formatMinutesLabel(panicPlan.availableMinutes)} available minutes.`,
+      actionLabel: 'Activate panic mode',
+      onPress: async () => {
+        for (const segment of panicPlan.segments) {
+          await createStudyBlock({
+            title: panicPlan.task.title,
+            taskId: panicPlan.task.id,
+            subject: panicPlan.task.subject,
+            difficulty: panicPlan.task.difficulty,
+            location: 'Emergency focus',
+            startsAt: segment.startsAt.toISOString(),
+            endsAt: segment.endsAt.toISOString(),
+            urgency: panicPlan.task.colorCode,
+          });
+        }
       },
     });
   }
@@ -1141,6 +1161,46 @@ export default function HomeScreen() {
             </View>
           ) : null}
         </View>
+        {autoSchedulePlan.sessions.length ? (
+          <View style={styles.autoPlanCard}>
+            <View style={styles.sectionHeaderRow}>
+              <MaterialIcons name="auto-awesome" size={16} color={clay.textMid} />
+              <ThemedText style={styles.sectionTitle}>Auto-schedule preview</ThemedText>
+            </View>
+            <View style={styles.autoPlanList}>
+              {autoSchedulePlan.sessions.slice(0, 3).map((session) => {
+                const palette = getUrgencyPalette(session.urgency);
+
+                return (
+                  <View key={`${session.taskId}-${session.startsAt.toISOString()}`} style={styles.autoPlanRow}>
+                    <View style={[styles.autoPlanDot, { backgroundColor: palette.border }]} />
+                    <View style={styles.autoPlanCopy}>
+                      <ThemedText style={styles.autoPlanTitle}>{session.title}</ThemedText>
+                      <ThemedText style={styles.autoPlanSubtitle}>
+                        {formatEventTimeRange(session.startsAt.toISOString(), session.endsAt.toISOString())} ·{' '}
+                        {session.bufferAfterMinutes} min buffer
+                      </ThemedText>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+            <ThemedText style={styles.autoPlanFooter}>
+              {autoSchedulePlan.sessions.length} block{autoSchedulePlan.sessions.length === 1 ? '' : 's'} ·{' '}
+              {formatMinutesLabel(autoSchedulePlan.totalMinutes)} total recommended study
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={styles.autoPlanCard}>
+            <View style={styles.sectionHeaderRow}>
+              <MaterialIcons name="auto-awesome" size={16} color={clay.textMid} />
+              <ThemedText style={styles.sectionTitle}>Auto-schedule preview</ThemedText>
+            </View>
+            <ThemedText style={styles.autoPlanEmpty}>
+              No priority sessions to auto-schedule right now. Add tasks or adjust limits so Smart Scheduler can plan ahead.
+            </ThemedText>
+          </View>
+        )}
 
         {freeWindow ? (
           <View style={styles.forecastCard}>
@@ -1691,6 +1751,51 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: clay.purpleDeep,
+  },
+  autoPlanCard: {
+    borderRadius: 24,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    gap: 8,
+    ...sharedShadow,
+  },
+  autoPlanList: {
+    gap: 6,
+  },
+  autoPlanRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  autoPlanDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 4,
+  },
+  autoPlanCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  autoPlanTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: clay.ink,
+  },
+  autoPlanSubtitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: clay.textMid,
+  },
+  autoPlanFooter: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: clay.textMid,
+  },
+  autoPlanEmpty: {
+    fontSize: 12,
+    color: clay.textMid,
+    lineHeight: 19,
   },
   forecastCard: {
     borderRadius: 22,

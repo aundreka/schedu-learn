@@ -346,6 +346,7 @@ export default function StudyScreen() {
             <View style={[s.stageBadge, { backgroundColor: stage.color }]}>
               <Text style={s.stageBadgeText}>{stage.label}</Text>
             </View>
+            <Text style={s.pupExpression}>{pupExpression}</Text>
           </View>
 
           {/* XP bar */}
@@ -390,9 +391,12 @@ export default function StudyScreen() {
 
         {/* Static Biscuit note (no online diary) */}
         <View style={[s.diaryCard, { backgroundColor: C.purplePale }]}>
-          <Text style={s.diaryLabel}>Biscuit's Note</Text>
+          <Text style={s.diaryLabel}>Biscuit’s Note</Text>
           <Text style={s.diaryText}>
-            Biscuit is cheering you on from your home screen. Keep finishing quests to keep his hunger bar happy!
+            {diaryLoading
+              ? 'Biscuit is jotting down a new note...'
+              : diary ||
+                'Biscuit is cheering you on from your home screen. Keep finishing quests to keep his hunger bar happy!'}
           </Text>
         </View>
 
@@ -454,7 +458,7 @@ export default function StudyScreen() {
             <Text style={s.modalEmoji}>🐾</Text>
             <Text style={s.modalTitle}>Good to see you!</Text>
             <Text style={s.modalSub}>
-              How are you feeling? This sets Biscuit's training intensity.
+              How are you feeling? This sets Biscuit’s training intensity.
             </Text>
             <View style={s.moodRow}>
               {MOODS.map((m) => (

@@ -119,7 +119,7 @@ export default function CreateScreen() {
       remainingMinutes: Number(estimatedMinutes) || 0,
       scheduledMinutes: 0,
     });
-  }, [difficulty, dueDate, dueTime, estimatedMinutes, gradeImpactPercent, previewDueIso, taskType]);
+  }, [difficulty, estimatedMinutes, gradeImpactPercent, previewDueIso, taskType]);
 
   const handleCreateTask = async () => {
     if (!user) {
