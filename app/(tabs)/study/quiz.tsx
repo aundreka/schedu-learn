@@ -78,7 +78,11 @@ async function generateQuizFromPDF(
             { text: prompt },
           ],
         }],
-        generationConfig: { maxOutputTokens: 8192, temperature: 0.3 },
+        generationConfig: {
+          maxOutputTokens: 8192,
+          temperature: 0.2,
+          responseMimeType: 'application/json', // <--- Add this to enforce JSON structure
+        },
       }),
     },
   );

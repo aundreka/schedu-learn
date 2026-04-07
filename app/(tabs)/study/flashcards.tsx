@@ -79,7 +79,8 @@ async function generateFlashcardsFromPDF(
         ],
         generationConfig: {
           maxOutputTokens: 8192,
-          temperature: 0.2, // low temp = more consistent JSON output
+          temperature: 0.2,
+          responseMimeType: 'application/json', // <--- Add this to enforce JSON structure
         },
       }),
     },

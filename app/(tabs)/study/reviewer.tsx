@@ -71,7 +71,11 @@ async function generateReviewFromPDF(
           { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
           { text: prompt },
         ]}],
-        generationConfig: { maxOutputTokens: 8192, temperature: 0.2 },
+        generationConfig: {
+          maxOutputTokens: 8192,
+          temperature: 0.2,
+          responseMimeType: 'application/json', // <--- Add this to enforce JSON structure
+        },
       }),
     },
   );
