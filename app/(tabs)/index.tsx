@@ -2,8 +2,8 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   ActivityIndicator,
+  Alert,
   Animated,
   Pressable,
   RefreshControl,
@@ -11,20 +11,48 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import Svg, { Defs, Ellipse, LinearGradient, Path, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, Ellipse, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ScheduleItem, TaskItem } from '@/lib/firebase/types';
-import { assessTaskUrgency, formatUrgencyLabel } from '@/lib/urgency';
 import {
   planAutoSchedule,
   planPanicMode,
   planRescheduleMissedBlock,
 } from '@/lib/scheduler/algorithm';
+import { assessTaskUrgency, formatUrgencyLabel } from '@/lib/urgency';
 import { useFirebaseBackend } from '@/providers/firebase-provider';
+// Helper function to color-code study blocks based on urgency
+function getUrgencyPalette(urgency?: string) {
+  switch (urgency?.toLowerCase()) {
+    case 'urgent':
+    case 'high':
+      return { bg: '#FFE4E4', text: '#D32F2F', border: '#FFCDCD' };
+    case 'medium':
+      return { bg: '#FFE4B0', text: '#B27B00', border: '#FFD685' };
+    case 'low':
+    case 'planned':
+    default:
+      return { bg: '#CAE7FF', text: '#005B9F', border: '#A6D7FF' };
+  }
+}
+
+// Helper function to format start and end times for study blocks
+function formatEventTimeRange(startIso?: string, endIso?: string) {
+  if (!startIso || !endIso) return 'Time TBD';
+  
+  const formatTime = (iso: string) => {
+    return new Date(iso).toLocaleTimeString([], { 
+      hour: 'numeric', 
+      minute: '2-digit' 
+    });
+  };
+
+  return `${formatTime(startIso)} - ${formatTime(endIso)}`;
+}
 
 type AlertTone = 'orange' | 'red' | 'blue';
 
