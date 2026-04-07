@@ -434,7 +434,7 @@ export default function HomeScreen() {
   };
 
   const {
-    authMessage, createStudyBlock, loadingData, lmsFeed,
+    createStudyBlock, loadingData,
     profile, preferences, refreshMockLmsFeed, rescheduleItem,
     schedules, setTaskStatus, tasks, user,
   } = backend;
@@ -451,7 +451,6 @@ export default function HomeScreen() {
   const completedTasks = useMemo(() => tasks.filter((task) => task.status === 'done' && task.completedAt), [tasks]);
   const taskMap = useMemo(() => buildTaskMap(tasks), [tasks]);
   const nextSchedule = schedules.find((item) => new Date(item.endsAt).getTime() >= now.getTime()) ?? null;
-  const latestFeed = lmsFeed[0] ?? null;
   const conflict = findConflict(todaySchedules);
   const nextGap = findNextGap(todaySchedules, now);
   const freeWindow = findLargestGap(todaySchedules, now);
@@ -462,7 +461,10 @@ export default function HomeScreen() {
   const autoSchedulePlan = useMemo(() => planAutoSchedule({ tasks: openTasks, schedules, preferences, now, }), [openTasks, schedules, preferences, now]);
   const reschedulePlan = useMemo(() => planRescheduleMissedBlock({ schedules, tasks: openTasks, preferences, now, }), [schedules, openTasks, preferences, now]);
   const panicPlan = useMemo(() => planPanicMode({ tasks: openTasks, schedules, preferences, now, }), [openTasks, schedules, preferences, now]);
-  const completedDays = useMemo(() => new Set(completedTasks.map((task) => startOfDay(new Date(task.completedAt as string)).toDateString())), [completedDays]);
+  const completedDays = useMemo(
+    () => new Set(completedTasks.map((task) => startOfDay(new Date(task.completedAt as string)).toDateString())),
+    [completedTasks]
+  );
 
   useEffect(() => {
     if (streakState.tone === 'idle' || streakState.tone === 'broken') {
