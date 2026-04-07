@@ -90,14 +90,38 @@ const SK = {
   minsTodayDate:  'pup_mins_today_date',
 } as const;
 
-// ─── Gemini diary (disabled: no API calls) ─────────────────────
+// ─── Gemini diary ─────────────────────────────────────────────
 async function fetchPupDiary(
-  _mode: StudyMode,
-  _stageLabel: string,
-  _mood: MoodKey | null,
+  mode: StudyMode,
+  stageLabel: string,
+  mood: MoodKey | null,
 ): Promise<string> {
-  // Returning a static local message so no network / API key is used.
-  return 'Biscuit curled up happily beside you. Nice work this session!';
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? '';
+  if (!apiKey) return 'Biscuit wagged his tail and curled up beside you. Good session!';
+  const prompt =
+    `You are a study puppy named Biscuit at stage "${stageLabel}". ` +
+    `Your human just finished a "${mode}" session feeling "${mood ?? 'normal'}". ` +
+    `Write exactly 2 short cute diary sentences (max 30 words) from Biscuit's view. No hashtags or emojis in text.`;
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 80, temperature: 0.8 },
+        }),
+      },
+    );
+    const data = await res.json();
+    return (
+      data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ??
+      'Biscuit nuzzled you proudly. Every session makes you both stronger.'
+    );
+  } catch {
+    return 'Biscuit nuzzled you proudly. Every session makes you both stronger.';
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -110,7 +134,7 @@ function getHungerColor(h: number) {
   return C.red;
 }
 function getHungerLabel(h: number) {
-  if (h >= 80) return 'Full & happy';
+  if (h >= 80) return 'Full & happy!';
   if (h >= 50) return 'Could use a snack';
   if (h >= 25) return 'Getting hungry…';
   return 'Very hungry! Study now!';
@@ -289,7 +313,7 @@ export default function StudyScreen() {
 
   // Navigate to quest — sets the flag index.tsx reads on return
   const goTo = async (mode: StudyMode, path: string) => {
-    // Removed: await AsyncStorage.setItem(SK.lastMode, mode);
+    await AsyncStorage.setItem(SK.lastMode, mode);
     if (mode === 'focus') {
       router.push({ pathname: path as never, params: { pomoDuration } });
     } else {
@@ -304,16 +328,16 @@ export default function StudyScreen() {
     hunger > 75       ? '😄' : '🙂';
 
   const quests = [
-    { mode: 'flashcards' as StudyMode, path: '/study/flashcards', emoji: '🧠', label: 'Flashcards', color: C.orange,      xp: XP_REWARDS.flashcards },
-    { mode: 'focus'      as StudyMode, path: '/study/focus',      emoji: '⚡', label: 'Focus',      color: C.green,       xp: XP_REWARDS.focus      },
-    { mode: 'quiz'       as StudyMode, path: '/study/quiz',       emoji: '⚔️', label: 'Quiz',       color: C.blue,        xp: XP_REWARDS.quiz       },
-    { mode: 'reviewer'   as StudyMode, path: '/study/reviewer',   emoji: '📖', label: 'Reviewer',   color: C.purpleLight, xp: XP_REWARDS.reviewer   },
+    { mode: 'flashcards' as StudyMode, path: '/study/flashcards', label: 'Flashcards', color: C.orange,      xp: XP_REWARDS.flashcards },
+    { mode: 'focus'      as StudyMode, path: '/study/focus', label: 'Focus',      color: C.green,       xp: XP_REWARDS.focus      },
+    { mode: 'quiz'       as StudyMode, path: '/study/quiz', label: 'Quiz',       color: C.blue,        xp: XP_REWARDS.quiz       },
+    { mode: 'reviewer'   as StudyMode, path: '/study/reviewer', label: 'Reviewer',   color: C.purpleLight, xp: XP_REWARDS.reviewer   },
   ];
 
   const stats = [
-    { label: 'XP',         value: String(xp), color: C.purpleLight },
-    { label: 'Sessions',   value: String(sessions), color: C.blue        },
-    { label: 'Streak',     value: `${streak}d`, color: C.orange      },
+    { label: 'XP',         value: String(xp),   color: C.purpleLight },
+    { label: 'Sessions',   value: String(sessions),    color: C.blue        },
+    { label: 'Streak',     value: `${streak}d`,      color: C.orange      },
     { label: 'Today',      value: formatMins(minsToday), color: C.green       },
   ];
 
@@ -342,11 +366,11 @@ export default function StudyScreen() {
             <Animated.Text style={[s.pupEmoji, { transform: [{ translateY: bounce }] }]}>
               {stage.emoji}
             </Animated.Text>
+            <Text style={s.pupExpression}>{pupExpression}</Text>
             <Text style={s.pupName}>Biscuit</Text>
             <View style={[s.stageBadge, { backgroundColor: stage.color }]}>
               <Text style={s.stageBadgeText}>{stage.label}</Text>
             </View>
-            <Text style={s.pupExpression}>{pupExpression}</Text>
           </View>
 
           {/* XP bar */}
@@ -382,21 +406,20 @@ export default function StudyScreen() {
       );
     }
 
-    // Manage Your Dog page
+    // Command center page
     return (
       <View style={[s.page, s.pagePadBottom, { minHeight: PAGE_H, width: SCREEN_W }]}>
-        <View style={s.p2TitleWrapper}>
-          <Text style={s.p2Title}>Manage Your Dog</Text>
-        </View>
+        <Text style={s.p2Title}>Manage Your Dog</Text>
 
-        {/* Static Biscuit note (no online diary) */}
+        {/* Diary */}
         <View style={[s.diaryCard, { backgroundColor: C.purplePale }]}>
-          <Text style={s.diaryLabel}>Biscuit’s Note</Text>
+          <Text style={s.diaryLabel}>Biscuits Diary</Text>
           <Text style={s.diaryText}>
             {diaryLoading
-              ? 'Biscuit is jotting down a new note...'
-              : diary ||
-                'Biscuit is cheering you on from your home screen. Keep finishing quests to keep his hunger bar happy!'}
+              ? "Biscuit is writing today's entry…"
+              : diary
+                ? `"${diary}"`
+                : '"Finish a quest and I\'ll write about our day together! 🐾"'}
           </Text>
         </View>
 
@@ -404,7 +427,6 @@ export default function StudyScreen() {
         <View style={s.statsGrid}>
           {stats.map((stat) => (
             <View key={stat.label} style={[s.statCard, { backgroundColor: stat.color }]}>
-
               <Text style={s.statVal}>{stat.value}</Text>
               <Text style={s.statLbl}>{stat.label}</Text>
             </View>
@@ -416,7 +438,7 @@ export default function StudyScreen() {
           <View style={[s.moodDisplay, { backgroundColor: currentMood.color }]}>
             <Text style={s.moodDisplayEmoji}>{currentMood.emoji}</Text>
             <View>
-              <Text style={s.moodDisplayTitle}>Today: {currentMood.label}</Text>
+              <Text>Today: {currentMood.label}</Text>
               <Text style={s.moodDisplaySub}>Focus sessions: {pomoDuration} min</Text>
             </View>
           </View>
@@ -432,7 +454,6 @@ export default function StudyScreen() {
               onPress={() => goTo(q.mode, q.path)}
               activeOpacity={0.82}
             >
-              <Text style={s.questEmoji}>{q.emoji}</Text>
               <Text style={s.questLabel}>{q.label}</Text>
               <View style={s.questXpBadge}>
                 <Text style={s.questXpText}>+{q.xp} XP</Text>
@@ -458,7 +479,7 @@ export default function StudyScreen() {
             <Text style={s.modalEmoji}>🐾</Text>
             <Text style={s.modalTitle}>Good to see you!</Text>
             <Text style={s.modalSub}>
-              How are you feeling? This sets Biscuit’s training intensity.
+              How are you feeling? This sets Biscuits training intensity.
             </Text>
             <View style={s.moodRow}>
               {MOODS.map((m) => (
@@ -545,8 +566,7 @@ const s = StyleSheet.create({
   swipeHint: { alignItems: 'center', marginTop: 4 },
   swipeText: { fontSize: 12, color: C.textLight },
 
-  p2TitleWrapper: { alignItems: 'center' },
-  p2Title: { fontSize: 26, fontWeight: '900', color: C.ink, marginTop: 8, textAlign: 'center' },
+  p2Title: { fontSize: 26, fontWeight: '900', color: C.ink, marginTop: 8 },
 
   diaryCard:  { borderRadius: 20, padding: 16, gap: 8 },
   diaryLabel: { fontSize: 11, fontWeight: '800', color: C.textMid, textTransform: 'uppercase', letterSpacing: 0.6 },

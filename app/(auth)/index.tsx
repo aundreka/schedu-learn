@@ -43,7 +43,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <ClayScreen greeting="Welcome back" title="Log In" subtitle="The same soft dashboard style starts right here." onRefresh={async () => {}}>
+    <ClayScreen greeting="Welcome back" title="Log In" onRefresh={async () => {}}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ClayCard style={styles.card}>
           <View style={styles.fieldGroup}>
